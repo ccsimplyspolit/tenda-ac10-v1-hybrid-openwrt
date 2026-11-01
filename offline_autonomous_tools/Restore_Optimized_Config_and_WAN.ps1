@@ -1,30 +1,29 @@
 <#
 .SYNOPSIS
-    100% Autonomous Offline Restorer for Tenda AC10 V1.0 Optimized Config (RouterCfm_optimized_v1.cfg)
-    and ISP Cloned WAN MAC (<YOUR_WAN_MAC>).
+    100% Autonomous Offline Restorer for Tenda AC10 V1.0 Optimized Config and ISP Cloned WAN MAC.
 
 .DESCRIPTION
     - Designed for post-flash or post-reset recovery when the router boots into stock firmware (192.168.0.1)
       and there is NO internet connectivity.
-    - Verifies cryptographic SHA-256 and critical NVRAM parameters inside RouterCfm_optimized_v1.cfg before upload:
-      * wan1.macaddr=<YOUR_WAN_MAC> (required for ISP DHCP lease)
+    - Dynamically extracts WAN MAC and Admin Password MD5 hash directly from the configuration file if not specified.
+    - Verifies cryptographic SHA-256 and critical NVRAM parameters inside the config before upload:
+      * wan1.macaddr (required for ISP DHCP lease, dynamically validated)
       * iptv.enable=0, iptv.stb.enable=0 & igmp.enable=0 (eliminates phantom br2/vlan3 MAC collision)
       * ucloud.syncserver=0 (disables cloud daemon & closes UDP 11812 hole)
       * sys.maxconn=8192 (expands conntrack table)
-      * sys.timentpserver=time.google.com (68-byte /bin/sntp compatible NTP server)
+      * sys.timentpserver (validates time.google.com or time.cloudflare.com)
     - If 192.168.0.1 is not yet reachable via DHCP, temporarily configures 192.168.0.116/24 on the physical
       Ethernet adapter inside a strict try / finally block and unconditionally restores DHCP + DNS upon exit.
     - Clears any stale session (/goform/exit + /logout/Auth), authenticates to /login/Auth (trying both
-      MD5("<YOUR_WIFI_PASSWORD>") = <YOUR_PASSWORD_MD5> and blank factory password), and uploads
-      RouterCfm_optimized_v1.cfg to /cgi-bin/UploadCfg.
+      config MD5 hash and blank factory password), and uploads configuration to /cgi-bin/UploadCfg.
 #>
 [CmdletBinding()]
 param(
     [string]$ConfigPath = "",
     [string]$RouterIp = "192.168.0.1",
     [int]$Port = 80,
-    [string]$AdminPasswordMd5 = "<YOUR_PASSWORD_MD5>",
-    [string]$ExpectedWanMac = "<YOUR_WAN_MAC>",
+    [string]$AdminPasswordMd5 = "",
+    [string]$ExpectedWanMac = "",
     [string]$InterfaceAlias = "Ethernet",
     [int]$TimeoutSeconds = 30,
     [switch]$SkipNetworkConfig,
@@ -38,11 +37,16 @@ $HybridKitRoot = Split-Path -Parent $ScriptDir
 
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
     $CandidateBackupCfg = Join-Path $HybridKitRoot "backups\RouterCfm_optimized_v1.cfg"
+    $CandidateSanitizedCfg = Join-Path $HybridKitRoot "config\RouterCfm_optimized_sanitized.cfg"
     $CandidateTemplateCfg = Join-Path $HybridKitRoot "01_Stock_Firmware_and_Partitions\RouterCfm_optimized_template.cfg"
     if (Test-Path -LiteralPath $CandidateBackupCfg) {
         $ConfigPath = $CandidateBackupCfg
-    } else {
+    } elseif (Test-Path -LiteralPath $CandidateSanitizedCfg) {
+        $ConfigPath = $CandidateSanitizedCfg
+    } elseif (Test-Path -LiteralPath $CandidateTemplateCfg) {
         $ConfigPath = $CandidateTemplateCfg
+    } else {
+        throw "No configuration file found. Checked: '$CandidateBackupCfg', '$CandidateSanitizedCfg', '$CandidateTemplateCfg'"
     }
 }
 
@@ -50,6 +54,19 @@ function Write-Step {
     param([string]$Message, [string]$Color = "Cyan")
     $ts = (Get-Date).ToString("HH:mm:ss")
     Write-Host "[$ts] $Message" -ForegroundColor $Color
+}
+
+function Get-StringMd5 {
+    param([string]$InputString)
+    if ([string]::IsNullOrWhiteSpace($InputString)) { return "" }
+    $md5 = [System.Security.Cryptography.MD5]::Create()
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($InputString)
+    $hashBytes = $md5.ComputeHash($bytes)
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($b in $hashBytes) {
+        [void]$sb.Append($b.ToString("x2"))
+    }
+    return $sb.ToString()
 }
 
 function Test-RouterCfmConfig {
@@ -62,14 +79,17 @@ function Test-RouterCfmConfig {
     [byte[]]$raw = [System.IO.File]::ReadAllBytes($Path)
     $text = [System.Text.Encoding]::ASCII.GetString($raw)
 
+    $wanEscaped = [regex]::Escape($WanMac)
+    if ($text -notmatch "(?m)^wan1?\.macaddr\s*=\s*$wanEscaped\s*$") {
+        throw "Config validation failed: missing required parameter 'wan1.macaddr=$WanMac' (ISP Cloned WAN MAC ($WanMac)) in $Path"
+    }
+
     $requiredChecks = @(
-        @{ Key = "wan1.macaddr=$WanMac";                Desc = "ISP Cloned WAN MAC ($WanMac)" },
         @{ Key = "iptv.enable=0";                       Desc = "IPTV Disabled" },
         @{ Key = "iptv.stb.enable=0";                   Desc = "IPTV Phantom Bridge Disabled (stbEn=0)" },
         @{ Key = "igmp.enable=0";                       Desc = "IGMP Proxy Disabled" },
         @{ Key = "ucloud.syncserver=0";                 Desc = "Tenda Cloud Daemon Disabled" },
-        @{ Key = "sys.maxconn=8192";                    Desc = "Conntrack Table Expanded to 8192" },
-        @{ Key = "sys.timentpserver=time.google.com";   Desc = "Google Public NTP Server (68-byte sntp compatible)" }
+        @{ Key = "sys.maxconn=8192";                    Desc = "Conntrack Table Expanded to 8192" }
     )
 
     foreach ($chk in $requiredChecks) {
@@ -78,12 +98,22 @@ function Test-RouterCfmConfig {
         }
     }
 
+    if ($text -match '(?m)^sys\.timentpserver\s*=\s*([^\r\n]+)') {
+        $ntpServer = $Matches[1].Trim()
+        if ($ntpServer -notmatch '^time\.(google|cloudflare)\.com$') {
+            throw "Config validation failed: unexpected NTP server '$ntpServer' in $Path (expected time.google.com or time.cloudflare.com)"
+        }
+    } else {
+        throw "Config validation failed: missing required parameter 'sys.timentpserver' in $Path"
+    }
+
     $sha256 = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
     return [PSCustomObject]@{
-        Path     = $Path
-        FileSize = $raw.Length
-        SHA256   = $sha256
-        WanMac   = $WanMac
+        Path      = $Path
+        FileSize  = $raw.Length
+        SHA256    = $sha256
+        WanMac    = $WanMac
+        NtpServer = $ntpServer
     }
 }
 
@@ -108,7 +138,7 @@ function Invoke-TendaConfigUpload {
         $client.Timeout = [TimeSpan]::FromSeconds($TimeoutSec)
 
         # 1. Clear any stale Web UI session before authenticating via /login/Auth
-        $passwordsToTry = @($PasswordMd5, "")
+        $passwordsToTry = if ([string]::IsNullOrWhiteSpace($PasswordMd5)) { @("") } else { @($PasswordMd5, "") }
         $loggedIn = $false
 
         foreach ($pwd in $passwordsToTry) {
@@ -196,11 +226,67 @@ function Invoke-TendaConfigUpload {
 # ==============================================================================
 Add-Type -AssemblyName System.Net.Http
 
-Write-Step "=== TENDA AC10 V1.0 OFFLINE CONFIG & WAN MAC (<YOUR_WAN_MAC>) RESTORER ===" "Cyan"
+Write-Step "=== TENDA AC10 V1.0 OFFLINE CONFIG & WAN MAC RESTORER ===" "Cyan"
+
+if (-not (Test-Path -LiteralPath $ConfigPath)) {
+    throw "Configuration file not found: $ConfigPath"
+}
+
+[byte[]]$rawConfigBytes = [System.IO.File]::ReadAllBytes($ConfigPath)
+$configText = [System.Text.Encoding]::ASCII.GetString($rawConfigBytes)
+
+# Resolve Expected WAN MAC dynamically if unset or set to template placeholder
+$isWanMacUnset = [string]::IsNullOrWhiteSpace($ExpectedWanMac) -or ($ExpectedWanMac -eq "<YOUR_WAN_MAC>") -or ($ExpectedWanMac -match '^<YOUR_.*>$')
+if ($isWanMacUnset) {
+    if ($configText -match '(?m)^wan1?\.macaddr\s*=\s*([^\r\n]+)') {
+        $extractedMac = $Matches[1].Trim()
+        if (($extractedMac.Length -eq 17) -and ($extractedMac -match '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$') -and ($extractedMac -notmatch '^<YOUR_')) {
+            $ExpectedWanMac = $extractedMac.ToUpperInvariant()
+            Write-Step "Dynamically extracted WAN MAC from config: $ExpectedWanMac" "Green"
+        } else {
+            throw "Config validation failed: 'wan1.macaddr' in $ConfigPath is '$extractedMac', which is not a valid 17-character MAC address (template placeholder detected or invalid format). Please supply -ExpectedWanMac or update the configuration file."
+        }
+    } else {
+        throw "Config validation failed: missing 'wan1.macaddr' parameter in $ConfigPath"
+    }
+} else {
+    if (($ExpectedWanMac.Length -ne 17) -or ($ExpectedWanMac -notmatch '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$')) {
+        throw "Invalid ExpectedWanMac format: '$ExpectedWanMac'. Must be a 17-character MAC address (e.g. 50:0F:F5:00:00:01)."
+    }
+    $ExpectedWanMac = $ExpectedWanMac.ToUpperInvariant()
+}
+
+# Resolve Admin Password MD5 dynamically if unset or set to template placeholder
+$isPasswordUnset = [string]::IsNullOrWhiteSpace($AdminPasswordMd5) -or ($AdminPasswordMd5 -eq "<YOUR_PASSWORD_MD5>") -or ($AdminPasswordMd5 -match '^<YOUR_.*>$')
+if ($isPasswordUnset) {
+    if ($configText -match '(?m)^(?:sys|http)\.userpass\s*=\s*([^\r\n]*)') {
+        $extractedPass = $Matches[1].Trim()
+        if ([string]::IsNullOrWhiteSpace($extractedPass) -or ($extractedPass -eq "<YOUR_PASSWORD_MD5>") -or ($extractedPass -match '^<YOUR_.*>$')) {
+            $AdminPasswordMd5 = ""
+            Write-Step "No admin password set in config (or template placeholder); will authenticate with blank password." "Yellow"
+        } elseif ($extractedPass -match '^[0-9a-fA-F]{32}$') {
+            $AdminPasswordMd5 = $extractedPass.ToLowerInvariant()
+            Write-Step "Dynamically extracted admin password MD5 hash from config." "Green"
+        } else {
+            $AdminPasswordMd5 = Get-StringMd5 -InputString $extractedPass
+            Write-Step "Dynamically computed MD5 hash for plaintext password in config." "Green"
+        }
+    } else {
+        $AdminPasswordMd5 = ""
+        Write-Step "No userpass parameter found in config; defaulting to blank password." "Yellow"
+    }
+} else {
+    if ($AdminPasswordMd5 -match '^[0-9a-fA-F]{32}$') {
+        $AdminPasswordMd5 = $AdminPasswordMd5.ToLowerInvariant()
+    } else {
+        $AdminPasswordMd5 = Get-StringMd5 -InputString $AdminPasswordMd5
+    }
+}
+
 $cfgInfo = Test-RouterCfmConfig -Path $ConfigPath -WanMac $ExpectedWanMac
 Write-Step ("Verified Config: {0} ({1:N0} B)" -f $cfgInfo.Path, $cfgInfo.FileSize) "Green"
 Write-Step ("SHA-256 Digest : {0}" -f $cfgInfo.SHA256) "Green"
-Write-Step ("WAN MAC Binding: {0} | stbEn=0 | ucloud=0 | maxconn=8192 | ntp=time.google.com [PASS]" -f $cfgInfo.WanMac) "Green"
+Write-Step ("WAN MAC Binding: {0} | stbEn=0 | ucloud=0 | maxconn=8192 | ntp={1} [PASS]" -f $cfgInfo.WanMac, $cfgInfo.NtpServer) "Green"
 
 if ($VerifyOnly) {
     Write-Step "VerifyOnly mode completed successfully." "Green"
@@ -212,12 +298,11 @@ if ($DryRun) {
     exit 0
 }
 
-[byte[]]$cfgBytes = [System.IO.File]::ReadAllBytes($ConfigPath)
 $fileName = Split-Path -Leaf $ConfigPath
 
 if ($SkipNetworkConfig) {
     $res = Invoke-TendaConfigUpload -TargetIp $RouterIp -TargetPort $Port `
-        -CfgBytes $cfgBytes -FileName $fileName -PasswordMd5 $AdminPasswordMd5 -TimeoutSec $TimeoutSeconds
+        -CfgBytes $rawConfigBytes -FileName $fileName -PasswordMd5 $AdminPasswordMd5 -TimeoutSec $TimeoutSeconds
     exit 0
 }
 
@@ -234,7 +319,7 @@ try {
     }
 
     $res = Invoke-TendaConfigUpload -TargetIp $RouterIp -TargetPort $Port `
-        -CfgBytes $cfgBytes -FileName $fileName -PasswordMd5 $AdminPasswordMd5 -TimeoutSec $TimeoutSeconds
+        -CfgBytes $rawConfigBytes -FileName $fileName -PasswordMd5 $AdminPasswordMd5 -TimeoutSec $TimeoutSeconds
     Write-Step "Router is applying configuration and rebooting (~45s)..." "Green"
 } finally {
     if ($switchedStatic) {

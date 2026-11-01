@@ -1,12 +1,12 @@
 @echo off
 setlocal EnableDelayedExpansion
-title Tenda AC10 V1.0 - Offline Config & WAN MAC (<YOUR_WAN_MAC>) Restorer
+title Tenda AC10 V1.0 - Offline Config ^& WAN MAC Restorer
 
 cd /d "%~dp0"
 echo ============================================================================
-echo   TENDA AC10 V1.0 - OFFLINE CONFIG ^& WAN MAC (<YOUR_WAN_MAC>) RESTORER
+echo   TENDA AC10 V1.0 - OFFLINE CONFIG ^& WAN MAC RESTORER
 echo ============================================================================
-echo   Restores RouterCfm_optimized_v1.cfg (Stock+, stbEn=0, ucloud=0, 8192 NAT)
+echo   Restores Optimized Config (Stock+, stbEn=0, ucloud=0, 8192 NAT)
 echo ============================================================================
 echo.
 

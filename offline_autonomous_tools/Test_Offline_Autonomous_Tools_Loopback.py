@@ -65,7 +65,7 @@ def run_ps1(script_path: Path, args: list[str], timeout: int = 60) -> subprocess
 
 
 class MockTendaHttpHandler(http.server.BaseHTTPRequestHandler):
-    expected_password: str = "<YOUR_PASSWORD_MD5>"
+    expected_password: str = ""
     logout_paths: list[str] = []
     auth_received: list[str] = []
     uploaded_files: list[bytes] = []
@@ -191,9 +191,11 @@ def main() -> int:
     if not stock_tftp_bin.exists():
         stock_tftp_bin = BACKUPS_DIR / "Tenda_AC10_V1_Stock_TFTP_Recovery.bin"
 
-    opt_cfg_file = STOCK_DIR / "RouterCfm_optimized_template.cfg"
+    opt_cfg_file = BACKUPS_DIR / "RouterCfm_optimized_v1.cfg"
     if not opt_cfg_file.exists():
-        opt_cfg_file = BACKUPS_DIR / "RouterCfm_optimized_v1.cfg"
+        opt_cfg_file = HYBRID_ROOT / "config" / "RouterCfm_optimized_sanitized.cfg"
+
+    template_cfg_file = STOCK_DIR / "RouterCfm_optimized_template.cfg"
 
     print("==============================================================================")
     print(" 1. END-TO-END LOOPBACK TEST: PowerShell TFTP Flash (7,588,884 B Stock Image)")
@@ -328,9 +330,15 @@ def main() -> int:
     expected_cfg_bytes = opt_cfg_file.read_bytes()
     expected_cfg_sha = hashlib.sha256(expected_cfg_bytes).hexdigest()
     m_wan = re.search(r"^wan1\.macaddr=(.+)$", expected_cfg_bytes.decode("utf-8", errors="replace"), re.MULTILINE)
-    cfg_wan_mac = m_wan.group(1).strip() if m_wan else "<YOUR_WAN_MAC>"
-    m_pwd = re.search(r"^sys\.userpass=(.+)$", expected_cfg_bytes.decode("utf-8", errors="replace"), re.MULTILINE)
-    cfg_pwd_md5 = m_pwd.group(1).strip() if m_pwd else "<YOUR_PASSWORD_MD5>"
+    cfg_wan_mac = m_wan.group(1).strip() if m_wan else ""
+    m_pwd = re.search(r"^(?:sys|http)\.userpass=(.+)$", expected_cfg_bytes.decode("utf-8", errors="replace"), re.MULTILINE)
+    cfg_pwd_raw = m_pwd.group(1).strip() if m_pwd else ""
+    if len(cfg_pwd_raw) == 32 and all(c in "0123456789abcdefABCDEF" for c in cfg_pwd_raw):
+        cfg_pwd_md5 = cfg_pwd_raw.lower()
+    elif cfg_pwd_raw and not cfg_pwd_raw.startswith("<YOUR_"):
+        cfg_pwd_md5 = hashlib.md5(cfg_pwd_raw.encode("utf-8")).hexdigest()
+    else:
+        cfg_pwd_md5 = ""
 
     httpd = http.server.HTTPServer(("127.0.0.1", 0), MockTendaHttpHandler)
     http_port = httpd.server_port
@@ -405,6 +413,79 @@ def main() -> int:
             and len(MockTendaHttpHandler.uploaded_files) == 1,
             "Factory-reset fallback: rejected HTTP 200 OK '1' on MD5 attempt and succeeded with blank password",
         )
+
+        # 4.3 Zero-argument -VerifyOnly against default configuration
+        res_zero_verify = run_ps1(ps_cfg, ["-VerifyOnly"], timeout=30)
+        tr.check(
+            res_zero_verify.returncode == 0
+            and "VerifyOnly mode completed successfully." in res_zero_verify.stdout
+            and cfg_wan_mac in res_zero_verify.stdout,
+            "Restore_Optimized_Config_and_WAN.ps1 zero-argument -VerifyOnly dynamic extraction & verification",
+            f"extracted_mac={cfg_wan_mac}",
+        )
+
+        # 4.4 Zero-argument -DryRun against default configuration
+        res_zero_dry = run_ps1(ps_cfg, ["-DryRun"], timeout=30)
+        tr.check(
+            res_zero_dry.returncode == 0
+            and "[DRY-RUN] Config verified." in res_zero_dry.stdout,
+            "Restore_Optimized_Config_and_WAN.ps1 zero-argument -DryRun succeeded without modifying NIC",
+            f"rc={res_zero_dry.returncode}",
+        )
+
+        # 4.5 Zero-argument loopback upload against mock HTTP server
+        MockTendaHttpHandler.expected_password = cfg_pwd_md5
+        MockTendaHttpHandler.logout_paths.clear()
+        MockTendaHttpHandler.auth_received.clear()
+        MockTendaHttpHandler.uploaded_files.clear()
+
+        res_zero_up = run_ps1(
+            ps_cfg,
+            [
+                "-RouterIp",
+                "127.0.0.1",
+                "-Port",
+                str(http_port),
+                "-SkipNetworkConfig",
+            ],
+            timeout=30,
+        )
+        tr.check(
+            res_zero_up.returncode == 0 and len(MockTendaHttpHandler.uploaded_files) == 1,
+            "Restore_Optimized_Config_and_WAN.ps1 zero-argument upload succeeded (dynamic WAN MAC & password)",
+            f"rc={res_zero_up.returncode}",
+        )
+        if MockTendaHttpHandler.uploaded_files:
+            up_bytes_zero = MockTendaHttpHandler.uploaded_files[0]
+            up_sha_zero = hashlib.sha256(up_bytes_zero).hexdigest()
+            tr.check(
+                len(up_bytes_zero) == len(expected_cfg_bytes) and up_sha_zero == expected_cfg_sha,
+                f"Zero-argument uploaded {opt_cfg_file.name} matches exact {len(expected_cfg_bytes):,} bytes and SHA-256",
+                up_sha_zero[:16] + "...",
+            )
+
+        # 4.6 Template placeholder rejection test
+        cleanup_temp = None
+        if template_cfg_file.exists():
+            tmpl_test_path = template_cfg_file
+        else:
+            cleanup_temp = tempfile.TemporaryDirectory()
+            tmpl_test_path = Path(cleanup_temp.name) / "RouterCfm_optimized_template.cfg"
+            tmpl_test_path.write_text(
+                "sys.timentpserver=time.cloudflare.com\r\nwan1.macaddr=<YOUR_WAN_MAC>\r\nsys.userpass=<YOUR_PASSWORD_MD5>\r\n",
+                encoding="ascii",
+            )
+        try:
+            res_tmpl = run_ps1(ps_cfg, ["-ConfigPath", str(tmpl_test_path), "-VerifyOnly"], timeout=30)
+            tmpl_err = res_tmpl.stdout + res_tmpl.stderr
+            tr.check(
+                res_tmpl.returncode != 0 and ("not a valid 17-character MAC address" in tmpl_err or "<YOUR_WAN_MAC>" in tmpl_err),
+                "Restore_Optimized_Config_and_WAN.ps1 rejected unconfigured template (<YOUR_WAN_MAC>)",
+                f"rc={res_tmpl.returncode}",
+            )
+        finally:
+            if cleanup_temp:
+                cleanup_temp.cleanup()
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -414,7 +495,8 @@ def main() -> int:
     print("==============================================================================")
     for name, script, extra in [
         ("Offline_TFTP_Recovery_and_Flash.ps1 -DryRun", ps_tftp, ["-FirmwarePath", str(stock_tftp_bin)]),
-        ("Restore_Optimized_Config_and_WAN.ps1 -DryRun", ps_cfg, ["-ConfigPath", str(opt_cfg_file), "-ExpectedWanMac", cfg_wan_mac]),
+        ("Restore_Optimized_Config_and_WAN.ps1 -DryRun (explicit config)", ps_cfg, ["-ConfigPath", str(opt_cfg_file), "-ExpectedWanMac", cfg_wan_mac]),
+        ("Restore_Optimized_Config_and_WAN.ps1 -DryRun (zero-arg)", ps_cfg, []),
         ("Emergency_Restore_PC_Network_DHCP.ps1 -DryRun", ps_dhcp, []),
     ]:
         r = run_ps1(script, extra + ["-DryRun"])
