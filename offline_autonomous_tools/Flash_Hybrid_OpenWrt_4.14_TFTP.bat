@@ -57,7 +57,8 @@ echo ===========================================================================
 echo   1. Plug Ethernet cable into LAN1, LAN2, or LAN3 (NOT WAN - Port 3 is off)
 echo   2. Hold RST button (GPIO 54) while powering on for 8-15 seconds
 echo   3. Adapter will automatically return to DHCP/DNS in the finally block!
-echo   4. After reboot (~90s), OpenWrt LuCI opens at http://192.168.0.1
+echo   4. After reboot (~90s), run Configure_OpenWrt_ISP_WAN_and_WiFi.bat!
+echo   5. OpenWrt LuCI Web UI opens at http://192.168.0.1
 echo ============================================================================
 echo.
 
@@ -83,7 +84,29 @@ if exist "%SCRIPT_DIR%Offline_TFTP_Recovery_and_Flash.ps1" (
     echo [ERROR] Flasher engine script not found in %SCRIPT_DIR%!
     exit /b 1
 )
+set "FLASH_EXIT=%ERRORLEVEL%"
+
+if %FLASH_EXIT% equ 0 (
+    echo.
+    echo ============================================================================
+    echo   [SUCCESS] TFTP FLASH COMPLETED SUCCESSFULLY!
+    echo ============================================================================
+    echo   NEXT STEPS:
+    echo   1. Wait ~90-120 seconds for Hybrid OpenWrt 4.14 to complete first boot.
+    echo   2. Plug your ISP internet cable into the WAN port (blue port).
+    echo   3. Run 'Configure_OpenWrt_ISP_WAN_and_WiFi.bat' to autonomously clone
+    echo      your ISP WAN MAC and configure Wi-Fi SSIDs ^& passwords.
+    echo   4. Access OpenWrt LuCI Web UI at: http://192.168.0.1
+    echo ============================================================================
+) else (
+    echo.
+    echo ============================================================================
+    echo   [ERROR] TFTP Flash failed with exit code %FLASH_EXIT%.
+    echo   If network adapter was not restored, run Emergency_Restore_PC_Network_DHCP.bat
+    echo ============================================================================
+)
 
 echo.
 echo Press any key to close...
 pause >nul
+exit /b %FLASH_EXIT%

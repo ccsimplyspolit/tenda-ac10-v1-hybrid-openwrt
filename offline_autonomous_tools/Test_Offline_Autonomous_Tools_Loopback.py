@@ -186,6 +186,8 @@ def main() -> int:
     ps_tftp = TOOLS_DIR / "Offline_TFTP_Recovery_and_Flash.ps1"
     ps_cfg = TOOLS_DIR / "Restore_Optimized_Config_and_WAN.ps1"
     ps_dhcp = TOOLS_DIR / "Emergency_Restore_PC_Network_DHCP.ps1"
+    ps_openwrt = TOOLS_DIR / "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1"
+    bat_openwrt = TOOLS_DIR / "Configure_OpenWrt_ISP_WAN_and_WiFi.bat"
 
     stock_tftp_bin = STOCK_DIR / "Tenda_AC10_V1_Stock_TFTP_Recovery.bin"
     if not stock_tftp_bin.exists():
@@ -498,9 +500,145 @@ def main() -> int:
         ("Restore_Optimized_Config_and_WAN.ps1 -DryRun (explicit config)", ps_cfg, ["-ConfigPath", str(opt_cfg_file), "-ExpectedWanMac", cfg_wan_mac]),
         ("Restore_Optimized_Config_and_WAN.ps1 -DryRun (zero-arg)", ps_cfg, []),
         ("Emergency_Restore_PC_Network_DHCP.ps1 -DryRun", ps_dhcp, []),
+        ("Configure_OpenWrt_ISP_WAN_and_WiFi.ps1 -DryRun (zero-arg)", ps_openwrt, []),
     ]:
         r = run_ps1(script, extra + ["-DryRun"])
         tr.check(r.returncode == 0, f"{name} succeeded without modifying NIC", f"rc={r.returncode}")
+
+    print("\n==============================================================================")
+    print(" 6. END-TO-END LOOPBACK & VALIDATION: Configure_OpenWrt_ISP_WAN_and_WiFi")
+    print("==============================================================================")
+    repo_tools_dir = Path(r"C:\Users\sshunko\AppData\Local\Temp\tenda_ac10_public_repo\offline_autonomous_tools")
+    repo_openwrt_ps1 = repo_tools_dir / "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1"
+    repo_openwrt_bat = repo_tools_dir / "Configure_OpenWrt_ISP_WAN_and_WiFi.bat"
+
+    # 6.1 File existence & SHA-256 cross-toolkit parity
+    has_parity = ps_openwrt.exists() and bat_openwrt.exists()
+    if repo_tools_dir.exists():
+        has_parity = (
+            has_parity
+            and repo_openwrt_ps1.exists()
+            and repo_openwrt_bat.exists()
+            and (ps_openwrt.read_bytes() == repo_openwrt_ps1.read_bytes())
+            and (bat_openwrt.read_bytes() == repo_openwrt_bat.read_bytes())
+        )
+    tr.check(has_parity, "Configure_OpenWrt_ISP_WAN_and_WiFi file existence & SHA-256 cross-toolkit parity")
+
+    # 6.2 Batch wrapper syntax & argument forwarding (confirming 0 syntax errors)
+    if bat_openwrt.exists():
+        res_bat = subprocess.run(
+            ["cmd.exe", "/c", str(bat_openwrt), "-VerifyOnly"],
+            input="",
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+        bat_err = res_bat.stderr.lower()
+        tr.check(
+            res_bat.returncode == 0
+            and "not recognized as an internal or external command" not in bat_err
+            and "syntax of the command is incorrect" not in bat_err
+            and ("VerifyOnly" in res_bat.stdout or "[SUCCESS]" in res_bat.stdout),
+            "Configure_OpenWrt_ISP_WAN_and_WiFi.bat syntax & argument forwarding (0 syntax errors)",
+            f"rc={res_bat.returncode}",
+        )
+
+    # 6.3 PowerShell AST parser validation (0 errors)
+    if ps_openwrt.exists():
+        ast_cmd = [
+            "powershell.exe",
+            "-NoProfile",
+            "-Command",
+            f"$errs = $null; [System.Management.Automation.Language.Parser]::ParseFile('{ps_openwrt}', [ref]$null, [ref]$errs); if ($errs.Count -eq 0) {{ exit 0 }} else {{ exit $errs.Count }}",
+        ]
+        res_ast = subprocess.run(ast_cmd, capture_output=True, text=True, timeout=15)
+        tr.check(res_ast.returncode == 0, "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1 passed PowerShell AST parser with 0 errors")
+
+    # 6.4 Zero-arg -VerifyOnly auto-discovery
+    if ps_openwrt.exists():
+        res_ow_verify = run_ps1(ps_openwrt, ["-VerifyOnly"], timeout=30)
+        tr.check(
+            res_ow_verify.returncode == 0
+            and "VerifyOnly" in res_ow_verify.stdout
+            and (cfg_wan_mac in res_ow_verify.stdout if cfg_wan_mac else True),
+            "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1 zero-argument -VerifyOnly auto-discovery",
+            f"extracted_mac={cfg_wan_mac}",
+        )
+
+    # 6.5 Explicit -VerifyOnly against sanitized config
+    sanitized_cfg = HYBRID_ROOT / "config" / "RouterCfm_optimized_sanitized.cfg"
+    if not sanitized_cfg.exists():
+        sanitized_cfg = repo_tools_dir.parent / "config" / "RouterCfm_optimized_sanitized.cfg"
+    if ps_openwrt.exists() and sanitized_cfg.exists():
+        res_ow_sanitized = run_ps1(ps_openwrt, ["-ConfigPath", str(sanitized_cfg), "-VerifyOnly"], timeout=30)
+        tr.check(
+            res_ow_sanitized.returncode == 0
+            and "50:0F:F5:00:00:01" in res_ow_sanitized.stdout
+            and "Tenda_AC10_2.4G" in res_ow_sanitized.stdout
+            and "Tenda_AC10_5G" in res_ow_sanitized.stdout,
+            "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1 explicit -VerifyOnly against sanitized config (50:0F:F5:00:00:01)",
+            f"rc={res_ow_sanitized.returncode}",
+        )
+
+    # 6.6 Zero-arg -DryRun mode & generated UCI command verification
+    if ps_openwrt.exists():
+        res_ow_dry = run_ps1(ps_openwrt, ["-DryRun"], timeout=30)
+        dry_out = res_ow_dry.stdout
+        tr.check(
+            res_ow_dry.returncode == 0
+            and "[DRY-RUN]" in dry_out
+            and "uci set network.wan.macaddr=" in dry_out
+            and "network.wan_eth0_1_dev.macaddr=" in dry_out
+            and "uci commit network" in dry_out
+            and "/etc/init.d/network reload" in dry_out
+            and "uci commit wireless" in dry_out
+            and "wifi reload" in dry_out,
+            "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1 zero-argument -DryRun mode & generated UCI command verification",
+            f"rc={res_ow_dry.returncode}",
+        )
+
+    # 6.7 Malformed MAC & template rejection
+    if ps_openwrt.exists():
+        bad_mac_res = run_ps1(ps_openwrt, ["-WanMac", "INVALID-MAC-FORMAT", "-VerifyOnly"], timeout=15)
+        short_mac_res = run_ps1(ps_openwrt, ["-WanMac", "11:22:33:44:55", "-VerifyOnly"], timeout=15)
+        tmpl_mac_res = run_ps1(ps_openwrt, ["-WanMac", "<YOUR_WAN_MAC>", "-VerifyOnly"], timeout=15)
+        tmpl_cfg_ok = True
+        if template_cfg_file.exists():
+            tmpl_cfg_res = run_ps1(ps_openwrt, ["-ConfigPath", str(template_cfg_file), "-VerifyOnly"], timeout=15)
+            tmpl_cfg_ok = tmpl_cfg_res.returncode != 0
+        short_key_res = run_ps1(ps_openwrt, ["-Key2G", "short", "-VerifyOnly"], timeout=15)
+        tr.check(
+            bad_mac_res.returncode != 0
+            and short_mac_res.returncode != 0
+            and tmpl_mac_res.returncode != 0
+            and tmpl_cfg_ok
+            and short_key_res.returncode != 0,
+            "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1 rejected malformed MACs, templates, and short passphrases",
+        )
+
+    # 6.8 Zero secrets static audit
+    if ps_openwrt.exists() and bat_openwrt.exists():
+        ps_text = ps_openwrt.read_text(encoding="utf-8", errors="ignore")
+        bat_text = bat_openwrt.read_text(encoding="utf-8", errors="ignore")
+        has_secret = False
+        if (
+            cfg_wan_mac
+            and cfg_wan_mac.upper() != "50:0F:F5:00:00:01"
+            and not cfg_wan_mac.startswith("<YOUR_")
+            and (cfg_wan_mac.lower() in ps_text.lower() or cfg_wan_mac.lower() in bat_text.lower())
+        ):
+            has_secret = True
+        m_psk = re.search(r"wl[25]g\.ssid0\.wpapsk_psk=(.+)", expected_cfg_bytes.decode("utf-8", errors="replace"))
+        if m_psk:
+            real_psk = m_psk.group(1).strip()
+            if (
+                len(real_psk) >= 8
+                and real_psk != "12345678"
+                and not real_psk.startswith("<YOUR_")
+                and (real_psk in ps_text or real_psk in bat_text)
+            ):
+                has_secret = True
+        tr.check(not has_secret, "Configure_OpenWrt_ISP_WAN_and_WiFi scripts contain 0 hardcoded private secrets (zero secrets audit)")
 
     print("\n==============================================================================")
     print(f" LOOPBACK SUITE SUMMARY: {tr.passed} PASSED, {tr.failed} FAILED")
