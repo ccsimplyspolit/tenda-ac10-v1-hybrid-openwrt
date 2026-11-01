@@ -133,7 +133,8 @@ print(f"  [OK] Patched vmlinux + tenda-ac10-v1.dtb compressed: {len(lzma_blob):,
 PYEOF
 
     # 4. Customize SquashFS rootfs for Tenda AC10 V1.0
-    unsquashfs -d "$STAGE_DIR/sqfs_root" "$STAGE_DIR/base_rootfs.squashfs"
+    sudo unsquashfs -d "$STAGE_DIR/sqfs_root" "$STAGE_DIR/base_rootfs.squashfs"
+    sudo chown -R "$(id -u):$(id -g)" "$STAGE_DIR/sqfs_root"
     cp -v "$SCRIPT_DIR/set-mib.sh" "$STAGE_DIR/sqfs_root/bin/set-mib.sh"
     chmod 0755 "$STAGE_DIR/sqfs_root/bin/set-mib.sh"
 
