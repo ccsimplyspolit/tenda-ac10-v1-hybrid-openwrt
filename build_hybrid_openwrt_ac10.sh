@@ -1,12 +1,23 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Tenda AC10 V1.0 — Automated Hybrid OpenWrt 4.14 Builder ("Best of Both Worlds")
-# Combines:
+# Architecture:
 #   1. Hardware NAT (~895–940 Mbps rtl819x_hwnat.c, host-byte-order + PORT0_ROUTER_MODE)
-#      from ADCDS/openwrt-dlink-dir842-r1 (Linux 4.14 / OpenWrt 19.07)
-#   2. Monolithic Dual-Band rtl8192cd (RTL8822BE 5 GHz Skyworth RFE_TYPE_6 +
-#      RTL8197FS 2.4 GHz RFE_TYPE_5, 866.7 Mbps VHT80) + mtd1 ASCII calibration
-#      injector (set-mib.sh) + cs6c @ 0x00030000 packaging for Tenda AC10 V1.0
+#      from ADCDS/openwrt-dlink-dir842-r1 (Linux 4.14.187 / OpenWrt 19.07) +
+#      9 MIPS32 LE Tenda AC10 V1.0 Switch/VLAN/ASIC Port-Map patches
+#      (WAN = Switch Port 3 / mask 0x08, LAN1..LAN3 = Switch Ports 2,1,0 / mask 0x07).
+#   2. 5 GHz PCIe RTL8822BE: mac80211 rtw88 + hostapd, ELF-patched for true
+#      Skyworth SE5003L1 RFE Type 6 (efuse.rfe_option=6, type5 BB PG & TX power
+#      limit tables, cca_efem_ccut + RTW_CCA_SRC_EFEM=1 enabling C-cut BB reg
+#      0x83C=0x9194B2B9, rtw8822b_config_rfe_efem, and .rodata RFE 6 eLNA AGC/RF
+#      curves) + dynamic per-unit HW_WLAN0_11N_XCAP & HW_WLAN0_WLAN_ADDR injection.
+#   3. 2.4 GHz SoC RTL8197FS: vendor rtl8192cd (Skyworth SKY85303-11 RFE Type 5,
+#      in-kernel WPA2-PSK) + dynamic mtd1 RF calibration + vladisslav0 UDP/uTP
+#      torrent stability fixes (manual_edca=1, disable_txsc=1, coexist=0 on noscan=1).
+#   4. Verified Bootloader & Stock Web UI Packaging:
+#      - factory.bin & sysupgrade.bin: single-segment cs6c @ 0x00030000
+#      - webupgrade.bin: 64-byte Tenda U-Boot trx2 header (IH_MAGIC 0x27051956,
+#        ih_os=2, ih_ver=0x00030028) + cs6c payload
 # ==============================================================================
 set -euo pipefail
 
@@ -22,10 +33,6 @@ fi
 cd "$WORK_DIR/openwrt-hybrid"
 
 # Fast deterministic Hybrid OpenWrt 4.14 assembly mode (default unless FULL_SOURCE_BUILD=1):
-# Compiles tenda-ac10-v1.dts -> tenda-ac10-v1.dtb, applies the 8 verified MIPS32 LE
-# Tenda AC10 V1.0 Switch/VLAN/ASIC port-map patches to Linux 4.14.187 vmlinux,
-# customizes SquashFS rootfs with Tenda AC10 V1.0 mtd1 RF calibration & VLANs,
-# and packs factory.bin, sysupgrade.bin, and webupgrade.bin.
 if [ "${FULL_SOURCE_BUILD:-0}" != "1" ]; then
     echo "[FAST-HYBRID] Building Tenda AC10 V1.0 Hybrid OpenWrt 4.14 images from verified Linux 4.14.187 kernel + DTS + SquashFS..."
     OUT_DIR="$WORK_DIR/openwrt-hybrid/bin/targets/realtek/rtl8197f"
@@ -98,7 +105,7 @@ dtb_off = 0x5335BC
 assert vm_dtb[dtb_off:dtb_off+4] == b"\xd0\x0d\xfe\xed", "DTB magic not at 0x5335BC"
 vmlinux = vm_dtb[:dtb_off]
 
-# Apply 8 verified MIPS32 LE binary patches for Tenda AC10 V1.0 Switch/VLAN/ASIC Port Map:
+# Apply 9 verified MIPS32 LE binary patches for Tenda AC10 V1.0 Switch/VLAN/ASIC Port Map:
 # Physical WAN = Switch Port 3 (mask 0x08), Physical LAN1..LAN3 = Switch Ports 2,1,0 (mask 0x07)
 patches = [
     (0x29A4DC, 0x2405010F, 0x24050107, "sw_add_vlan_fid LAN member=0x107 (Ports 0,1,2 + CPU8)"),
@@ -109,6 +116,7 @@ patches = [
     (0x29A54C, 0x008B2025, 0x008A2024, "and $a0, $a0, $t2 (mask upper 16 bits 0xF000FFFF)"),
     (0x29A870, 0x1000FF37, 0x1000FF34, "b 0x8029A544 (route odd WAN port 3 PVID=1 to upper-halfword)"),
     (0x5084D0, 0x00000010, 0x00000008, "l2_mask_wan = 0x08 (Switch Port 3)"),
+    (0x5084D4, 0x00000004, 0x00000007, "l2_mask_lan = 0x07 (Switch Ports 0,1,2)"),
 ]
 for off, exp_old, new_val, desc in patches:
     cur, = struct.unpack_from("<I", vmlinux, off)
@@ -137,6 +145,8 @@ PYEOF
     sudo chown -R "$(id -u):$(id -g)" "$STAGE_DIR/sqfs_root"
     cp -v "$SCRIPT_DIR/set-mib.sh" "$STAGE_DIR/sqfs_root/bin/set-mib.sh"
     chmod 0755 "$STAGE_DIR/sqfs_root/bin/set-mib.sh"
+    mkdir -p "$STAGE_DIR/sqfs_root/usr/sbin"
+    ln -sf /bin/set-mib.sh "$STAGE_DIR/sqfs_root/usr/sbin/set-mib.sh"
 
     cat > "$STAGE_DIR/sqfs_root/etc/init.d/ac10-hwparams" << 'EOF'
 #!/bin/sh /etc/rc.common
@@ -151,18 +161,193 @@ EOF
     chmod 0755 "$STAGE_DIR/sqfs_root/etc/init.d/ac10-hwparams"
     ln -sf ../init.d/ac10-hwparams "$STAGE_DIR/sqfs_root/etc/rc.d/S18ac10-hwparams"
 
-    # Configure rtw88_core crystal capacitance override (HW_WLAN0_11N_XCAP=27) before rtw88_8822be probe
+    # Load rtw88_core WITHOUT any unit-specific hardcoded xtal_cap_override;
+    # /etc/rc.d/S18ac10-hwparams -> /bin/set-mib.sh dynamically reads per-unit
+    # HW_WLAN0_11N_XCAP from /dev/mtd1, updates xtal_cap_override, and re-probes rtw88_8822be.
     cat > "$STAGE_DIR/sqfs_root/etc/modules.d/rtw88" << 'EOF'
-rtw88_core xtal_cap_override=27
+rtw88_core
 rtw88_8723de
 rtw88_8822be
 rtw88_8822ce
 EOF
 
+    # UDP gaming / torrent conntrack tuning for 64 MB RAM (4PDA #3584)
+    mkdir -p "$STAGE_DIR/sqfs_root/etc/sysctl.d"
+    cat > "$STAGE_DIR/sqfs_root/etc/sysctl.d/99-ac10-conntrack.conf" << 'EOF'
+# Tenda AC10 V1.0 (64 MB DDR2): prevent UDP/uTP conntrack exhaustion & gaming jitter
+net.netfilter.nf_conntrack_max=16384
+net.netfilter.nf_conntrack_udp_timeout=60
+net.netfilter.nf_conntrack_udp_timeout_stream=180
+EOF
+
+    # 4b. Patch rtw88_8822b.ko for true Skyworth SE5003L1 RFE Type 6 & customize scripts
     python3 - "$STAGE_DIR/sqfs_root" << 'PYEOF'
-import os, sys
+import os, struct, sys
+from collections import defaultdict
 
 root = sys.argv[1]
+
+def patch_and_verify_rtw88_8822b_ko(ko_path: str) -> None:
+    raw = bytearray(open(ko_path, "rb").read())
+    assert raw[:4] == b"\x7fELF" and raw[4] == 1 and raw[5] == 1, "Expected 32-bit LE ELF"
+
+    e_shoff, = struct.unpack_from("<I", raw, 32)
+    e_shentsize, e_shnum, e_shstrndx = struct.unpack_from("<HHH", raw, 46)
+    shdrs = [list(struct.unpack_from("<10I", raw, e_shoff + i * e_shentsize)) for i in range(e_shnum)]
+    shstr = bytes(raw[shdrs[e_shstrndx][4]:shdrs[e_shstrndx][4] + shdrs[e_shstrndx][5]])
+    sec_by_name = {shstr[s[0]:shstr.index(b"\x00", s[0])].decode(): i for i, s in enumerate(shdrs)}
+
+    idx_text = sec_by_name[".text"]
+    idx_rodata = sec_by_name[".rodata"]
+    idx_rel_rodata = sec_by_name[".rel.rodata"]
+    idx_rostr = sec_by_name[".rodata.str1.4"]
+    idx_data = sec_by_name[".data"]
+    idx_symtab = sec_by_name[".symtab"]
+    idx_strtab = sec_by_name[".strtab"]
+
+    sec_bytes = {
+        i: (b"" if s[1] == 8 else bytearray(raw[s[4]:s[4] + s[5]]))
+        for i, s in enumerate(shdrs)
+    }
+
+    sym_b = sec_bytes[idx_symtab]
+    str_b = sec_bytes[idx_strtab]
+    sym_idx_by_name, sec_sym_idx = {}, {}
+    for j in range(0, len(sym_b), 16):
+        st_name, st_val, st_sz, st_info, st_other, st_shndx = struct.unpack_from("<IIIBBH", sym_b, j)
+        sidx = j // 16
+        if (st_info & 0xF) == 3:
+            sec_sym_idx[st_shndx] = sidx
+        if st_name:
+            nm = str_b[st_name:str_b.index(b"\x00", st_name)].decode()
+            sym_idx_by_name[nm] = (sidx, st_val, st_shndx)
+
+    sym_pg5 = sym_idx_by_name["rtw8822b_bb_pg_type5_tbl"][0]
+    sym_lmt5 = sym_idx_by_name["rtw8822b_txpwr_lmt_type5_tbl"][0]
+    sym_rodata_sec = sec_sym_idx[idx_rodata]
+    sym_text_sec = sec_sym_idx[idx_text]
+
+    txt = sec_bytes[idx_text]
+    ro = sec_bytes[idx_rodata]
+    rel_ro = sec_bytes[idx_rel_rodata]
+    rostr = sec_bytes[idx_rostr]
+    dat = sec_bytes[idx_data]
+
+    for off, old_w, new_w in [
+        (0x0CF8, 0x24020002, 0x24020006),  # blank-eFuse fallback: rfe_option = 6 (Skyworth SE5003L1)
+        (0x2928, 0x2EC20006, 0x2EC20007),  # rtw8822b_config_trx_mode: rfe_option < 7
+        (0x378C, 0x2EC20006, 0x2EC20007),  # rtw8822b_set_channel_bb:  rfe_option < 7
+        (0x32B0, 0x3C030000, 0x3C030003),  # HI16(.rodata + 0x30000)
+        (0x32BC, 0x247E0CB0, 0x247E0000),  # LO16(.rodata + 0x30000)
+        (0x4650, 0x3C170000, 0x3C170003),  # HI16(.rodata + 0x30000)
+        (0x4658, 0x26F70CB0, 0x26F70000),  # LO16(.rodata + 0x30000)
+    ]:
+        cur_w, = struct.unpack_from("<I", txt, off)
+        assert cur_w == old_w, f".text+0x{off:x}: got 0x{cur_w:08x}, expected 0x{old_w:08x}"
+        struct.pack_into("<I", txt, off, new_w)
+
+    old_msg = b"rtw88: blank efuse (rfe=0xff), defaulting rfe_option=2\n"
+    new_msg = b"rtw88: blank efuse (rfe=0xff), defaulting rfe_option=6\n"
+    msg_idx = rostr.find(old_msg)
+    assert msg_idx != -1, "Missing fallback string in .rodata.str1.4"
+    rostr[msg_idx:msg_idx + len(new_msg)] = new_msg
+
+    assert len(ro) == 0x2DF30, f"Unexpected .rodata size 0x{len(ro):x}"
+    NEW_RFE_INFO_OFF = 0x30000
+    NEW_RFE_DEFS_OFF = 0x30090
+    ro.extend(b"\x00" * (NEW_RFE_INFO_OFF - len(ro)))
+
+    # rfe_info[0..5] + rfe_info[6] (cca_efem_ccut, cca_efem_ccut, RTW_CCA_SRC_EFEM=1, coex_scbd=0, rtw8822b_config_rfe_efem)
+    ro.extend(bytes(ro[0xCB0:0xCB0 + 120]) + struct.pack("<IIIII", 0x00000D58, 0x00000D58, 1, 0, 0x00001A4C))
+    ro.extend(b"\x00" * (NEW_RFE_DEFS_OFF - len(ro)))
+    # rfe_defs[0..5] + rfe_defs[6] (&rtw8822b_bb_pg_type5_tbl, &rtw8822b_txpwr_lmt_type5_tbl)
+    ro.extend(bytes(ro[0x904:0x904 + 48]) + struct.pack("<II", 0, 0))
+    if len(ro) % 16:
+        ro.extend(b"\x00" * (16 - (len(ro) % 16)))
+
+    R_MIPS_32 = 2
+    extra_rels = bytearray()
+    for j in range(0, len(rel_ro), 8):
+        r_off, r_info = struct.unpack_from("<II", rel_ro, j)
+        if 0xCB0 <= r_off < 0xD28:
+            extra_rels.extend(struct.pack("<II", NEW_RFE_INFO_OFF + (r_off - 0xCB0), r_info))
+        elif 0x904 <= r_off < 0x934:
+            extra_rels.extend(struct.pack("<II", NEW_RFE_DEFS_OFF + (r_off - 0x904), r_info))
+
+    RFE6_INFO_OFF = NEW_RFE_INFO_OFF + 6 * 20
+    extra_rels.extend(struct.pack("<II", RFE6_INFO_OFF + 0x00, (sym_rodata_sec << 8) | R_MIPS_32))
+    extra_rels.extend(struct.pack("<II", RFE6_INFO_OFF + 0x04, (sym_rodata_sec << 8) | R_MIPS_32))
+    extra_rels.extend(struct.pack("<II", RFE6_INFO_OFF + 0x10, (sym_text_sec << 8) | R_MIPS_32))
+
+    RFE6_DEFS_OFF = NEW_RFE_DEFS_OFF + 6 * 8
+    extra_rels.extend(struct.pack("<II", RFE6_DEFS_OFF + 0x00, (sym_pg5 << 8) | R_MIPS_32))
+    extra_rels.extend(struct.pack("<II", RFE6_DEFS_OFF + 0x04, (sym_lmt5 << 8) | R_MIPS_32))
+    rel_ro.extend(extra_rels)
+
+    cur_defs_ptr, cur_defs_sz = struct.unpack_from("<II", dat, 0x94)
+    assert cur_defs_ptr == 0x904 and cur_defs_sz == 6
+    struct.pack_into("<II", dat, 0x94, NEW_RFE_DEFS_OFF, 7)
+
+    out = bytearray(raw[:0x40])
+    for idx in sorted(range(1, e_shnum), key=lambda k: (shdrs[k][4], k)):
+        sh = shdrs[idx]
+        align = max(sh[8], 1)
+        if len(out) % align:
+            out.extend(b"\x00" * (align - (len(out) % align)))
+        sh[4] = len(out)
+        if sh[1] != 8:
+            sh[5] = len(sec_bytes[idx])
+            out.extend(sec_bytes[idx])
+    if len(out) % 4:
+        out.extend(b"\x00" * (4 - (len(out) % 4)))
+    struct.pack_into("<I", out, 32, len(out))
+    for sh in shdrs:
+        out.extend(struct.pack("<10I", *sh))
+    open(ko_path, "wb").write(out)
+
+    # Self-test with Linux arch/mips/kernel/module.c relocation rules
+    v_shoff, = struct.unpack_from("<I", out, 32)
+    v_shdrs = [struct.unpack_from("<10I", out, v_shoff + i * e_shentsize) for i in range(e_shnum)]
+    bases, mem, cur_va = {}, {}, 0xC0915000
+    for i, s in enumerate(v_shdrs):
+        if s[2] & 0x2:
+            align = max(s[8], 4)
+            cur_va = (cur_va + align - 1) & ~(align - 1)
+            bases[i] = cur_va
+            mem[i] = bytearray(s[5]) if s[1] == 8 else bytearray(out[s[4]:s[4] + s[5]])
+            cur_va += s[5]
+    v_sym = out[v_shdrs[idx_symtab][4]:v_shdrs[idx_symtab][4] + v_shdrs[idx_symtab][5]]
+    def sym_va(sidx):
+        _, st_val, _, _, _, st_shndx = struct.unpack_from("<IIIBBH", v_sym, sidx * 16)
+        return (0x80100000 + sidx * 16) if st_shndx == 0 else (bases[st_shndx] + st_val)
+    for i, s in enumerate(v_shdrs):
+        if s[1] == 9 and s[7] in mem:
+            tbuf = mem[s[7]]; rb = out[s[4]:s[4] + s[5]]
+            hi_by_sym = defaultdict(list); last_hi = {}
+            for j in range(0, len(rb), 8):
+                r_off, r_info = struct.unpack_from("<II", rb, j)
+                sidx = r_info >> 8; rtype = r_info & 0xFF; sva = sym_va(sidx)
+                w, = struct.unpack_from("<I", tbuf, r_off)
+                if rtype == 2:
+                    struct.pack_into("<I", tbuf, r_off, (w + sva) & 0xFFFFFFFF)
+                elif rtype == 5:
+                    hi_by_sym[sidx].append((r_off, w)); last_hi[sidx] = w & 0xFFFF
+                elif rtype == 6:
+                    lo = (w & 0xFFFF) - (0x10000 if (w & 0x8000) else 0)
+                    hi0 = last_hi.get(sidx, 0)
+                    for h_off, hw in hi_by_sym[sidx]:
+                        v = (sva + ((hw & 0xFFFF) << 16) + lo) & 0xFFFFFFFF
+                        struct.pack_into("<I", tbuf, h_off, (hw & 0xFFFF0000) | (((v + 0x8000) >> 16) & 0xFFFF))
+                    hi_by_sym[sidx].clear()
+                    v = (sva + (hi0 << 16) + lo) & 0xFFFFFFFF
+                    struct.pack_into("<I", tbuf, r_off, (w & 0xFFFF0000) | (v & 0xFFFF))
+    rfe6_info = struct.unpack_from("<5I", mem[idx_rodata], 0x30000 + 6 * 20)
+    assert rfe6_info == (bases[idx_rodata] + 0xD58, bases[idx_rodata] + 0xD58, 1, 0, bases[idx_text] + 0x1A4C)
+    rfe6_defs = struct.unpack_from("<2I", mem[idx_rodata], 0x30090 + 6 * 8)
+    assert rfe6_defs == (bases[idx_rodata] + 0x16204, bases[idx_rodata] + 0x0E50)
+    print(f"  [OK] Patched & relocation-verified rtw88_8822b.ko for Skyworth SE5003L1 RFE Type 6 ({len(out):,} B)")
+
+patch_and_verify_rtw88_8822b_ko(os.path.join(root, "lib/modules/4.14.187/rtw88_8822b.ko"))
 
 # 1. /lib/realtek.sh: detect "Tenda AC10 V1.0" -> "tenda,ac10-v1"
 p_rtk = os.path.join(root, "lib/realtek.sh")
@@ -182,11 +367,11 @@ s = s.replace(
 )
 open(p_leds, "w", encoding="utf-8").write(s)
 
-# 3. /etc/board.d/02_network: read HW_NIC0_ADDR from /dev/mtd1 for Tenda AC10 V1.0 LAN/WAN MACs
+# 3. /etc/board.d/02_network: read HW_NIC0_ADDR from /dev/mtd1 (neutral OUI fallback 50:0f:f5:00:00:00)
 p_net = os.path.join(root, "etc/board.d/02_network")
 s = open(p_net, "r", encoding="utf-8").read()
 ac10_net_case = """  tenda,ac10-v1)
-    lan_mac=$(dd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr '\\0' '\\n' | grep '^HW_NIC0_ADDR=' | head -n1 | cut -d= -f2 | sed 's/../&:/g;s/:$//' | tr 'A-F' 'a-f')
+    lan_mac=$(dd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr '\\0' '\\n' | tr -d '\\r' | grep '^HW_NIC0_ADDR=' | head -n1 | cut -d= -f2 | sed 's/../&:/g;s/:$//' | tr 'A-F' 'a-f')
     case "$lan_mac" in
       [0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;;
       *) lan_mac="50:0f:f5:00:00:00" ;;
@@ -203,11 +388,13 @@ p_asic = os.path.join(root, "etc/init.d/dir842-asic")
 s = open(p_asic, "r", encoding="utf-8").read()
 s = s.replace(
     '*) want="" ;;',
-    '*) want=$(dd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr \'\\0\' \'\\n\' | grep \'^HW_NIC0_ADDR=\' | head -n1 | cut -d= -f2 | sed \'s/../&:/g;s/:$//\' | tr \'A-F\' \'a-f\') ;;',
+    '*) want=$(dd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr \'\\0\' \'\\n\' | tr -d \'\\r\' | grep \'^HW_NIC0_ADDR=\' | head -n1 | cut -d= -f2 | sed \'s/../&:/g;s/:$//\' | tr \'A-F\' \'a-f\') ;;',
 )
 open(p_asic, "w", encoding="utf-8").write(s)
 
-# 5. /etc/uci-defaults/99-dir842-m5: Switch Port 3 = WAN (vlan 1), Ports 0,1,2 = LAN (vlan 2), Tenda SSID/MAC
+# 5. /etc/uci-defaults/99-dir842-m5: Switch Port 3 = WAN (vlan 1), Ports 0,1,2 = LAN (vlan 2),
+#    Tenda SSID/MAC (neutral fallback 50:0f:f5:00:00:05), fail-safe HT20 default on channel 36
+#    (VHT40/VHT80 selectable in LuCI now that RFE Type 6 0x83C=0x9194B2B9 + type5 tables are patched).
 p_m5 = os.path.join(root, "etc/uci-defaults/99-dir842-m5")
 s = open(p_m5, "r", encoding="utf-8").read()
 assert "set network.@switch_vlan[-1].ports='4 6t'" in s
@@ -217,7 +404,7 @@ s = s.replace("set network.@switch_vlan[-1].ports='0 1 2 3 6t'", "set network.@s
 s = s.replace("set wireless.default_radio0.ssid='DIR842-OpenWrt'", "set wireless.default_radio0.ssid='Tenda-AC10-5G'")
 s = s.replace(
     "DIR842_WIFI_MAC='02:11:22:33:44:56' ;;",
-    "DIR842_WIFI_MAC=$(dd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr '\\0' '\\n' | grep '^HW_WLAN0_WLAN_ADDR=' | head -n1 | cut -d= -f2 | sed 's/../&:/g;s/:$//' | tr 'A-F' 'a-f')\n\t[ -z \"$DIR842_WIFI_MAC\" ] && DIR842_WIFI_MAC='50:0f:f5:00:00:05' ;;",
+    "DIR842_WIFI_MAC=$(dd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr '\\0' '\\n' | tr -d '\\r' | grep '^HW_WLAN0_WLAN_ADDR=' | head -n1 | cut -d= -f2 | sed 's/../&:/g;s/:$//' | tr 'A-F' 'a-f')\n\tcase \"$DIR842_WIFI_MAC\" in [0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;; *) DIR842_WIFI_MAC='50:0f:f5:00:00:05' ;; esac ;;",
 )
 s = s.replace(
     "uci -q set system.@system[0].dir842_m5_seeded='1'",
@@ -225,18 +412,55 @@ s = s.replace(
 )
 open(p_m5, "w", encoding="utf-8").write(s)
 
-# 6. /etc/uci-defaults/09_wireless-dualband-dir842: 2.4G SSID = Tenda-AC10-2G, HT40
+# 5b. /etc/uci-defaults/11_dir842-htmode-ht20: do not clobber user-selected VHT40/VHT80 across sysupgrade
+p_ht20 = os.path.join(root, "etc/uci-defaults/11_dir842-htmode-ht20")
+if os.path.exists(p_ht20):
+    open(p_ht20, "w", encoding="utf-8").write("#!/bin/sh\n# Tenda AC10 V1.0: preserve user-selected 5 GHz htmode (HT20 default; VHT40/VHT80 optional)\nexit 0\n")
+
+# 5c. /lib/preinit/80_mount_root: auto-erase stale stock Tenda SquashFS bytes at rootfs_data before mount_root
+p_mr = os.path.join(root, "lib/preinit/80_mount_root")
+s_mr = open(p_mr, "r", encoding="utf-8").read()
+rfd_guard = """do_mount_root() {
+\tlocal _rfd_mtd=$(sed -n 's/^\\(mtd[0-9]\\+\\):.*\\"rootfs_data\\"/\\1/p' /proc/mtd 2>/dev/null | head -n1)
+\tif [ -n "$_rfd_mtd" ] && [ -c "/dev/$_rfd_mtd" ]; then
+\t\tlocal _rfd_hdr=$(dd if="/dev/$_rfd_mtd" bs=4 count=1 2>/dev/null | hexdump -v -e '4/1 "%02x"')
+\t\tcase "$_rfd_hdr" in
+\t\t\t1985*|8519*|deadc0de|ffffffff|"") ;;
+\t\t\t*)
+\t\t\t\techo "ac10-preinit: formatting stale stock bytes on /dev/$_rfd_mtd (hdr=0x$_rfd_hdr) for JFFS2 overlay" > /dev/kmsg
+\t\t\t\tmtd erase rootfs_data 2>/dev/null || printf '\\xde\\xad\\xc0\\xde' | mtd write - rootfs_data 2>/dev/null
+\t\t\t\t;;
+\t\tesac
+\tfi
+\tmount_root"""
+assert "do_mount_root() {\n\tmount_root" in s_mr
+s_mr = s_mr.replace("do_mount_root() {\n\tmount_root", rfd_guard, 1)
+open(p_mr, "w", encoding="utf-8").write(s_mr)
+
+# 6. /etc/uci-defaults/09_wireless-dualband-dir842: 2.4G SSID = Tenda-AC10-2G, keep urban interference-safe HT20 default
 p_w2 = os.path.join(root, "etc/uci-defaults/09_wireless-dualband-dir842")
 s = open(p_w2, "r", encoding="utf-8").read()
 s = s.replace("set wireless.default_radio1.ssid='DIR842-2G'", "set wireless.default_radio1.ssid='Tenda-AC10-2G'")
-s = s.replace("set wireless.radio1.htmode='HT20'", "set wireless.radio1.htmode='HT40'")
+assert "set wireless.radio1.htmode='HT20'" in s
 open(p_w2, "w", encoding="utf-8").write(s)
 
-# 7. /lib/netifd/wireless/rtl8192cd.sh: inject Tenda AC10 V1.0 2.4G RF calibration (RFE Type 5, XCAP, THER, TX power tables, MAC) into RTL8192CD.dat
+# 7. /lib/netifd/wireless/rtl8192cd.sh: inject Tenda AC10 V1.0 2.4G RF calibration (RFE Type 5, XCAP, THER, TX power tables, MAC)
+#    + vladisslav0 4PDA #97815216 & #98016337 UDP/uTP fixes (manual_edca=1, disable_txsc=1, coexist=0 on noscan=1)
 p_drv = os.path.join(root, "lib/netifd/wireless/rtl8192cd.sh")
 s = open(p_drv, "r", encoding="utf-8").read()
+assert "json_get_vars channel htmode country band phy macaddr beacon_int dtim_period led_type" in s
+s = s.replace(
+    "local beacon_int dtim_period v",
+    "local beacon_int dtim_period noscan led_type v",
+    1,
+)
+s = s.replace(
+    "json_get_vars channel htmode country band phy macaddr beacon_int dtim_period led_type",
+    "json_get_vars channel htmode country band phy macaddr beacon_int dtim_period noscan led_type",
+    1,
+)
 cal_snippet = """\t\techo "${phy_ifname}_phyBandSelect=1"
-\t\t# Inject Tenda AC10 V1.0 mtd1 2.4 GHz Factory Calibration (RTL8197FS + Skyworth RFE Type 5)
+\t\t# Inject Tenda AC10 V1.0 mtd1 2.4 GHz Factory Calibration (RTL8197FS + Skyworth SKY85303-11 RFE Type 5)
 \t\t_cal_tmp="/tmp/ac10_2g_cal.$$"
 \t\tdd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr '\\0' '\\n' | tr -d '\\r' > "$_cal_tmp"
 \t\t_xcap=$(grep '^HW_WLAN1_11N_XCAP=' "$_cal_tmp" | head -n1 | cut -d= -f2); [ -z "$_xcap" ] && _xcap="46"
@@ -250,7 +474,8 @@ cal_snippet = """\t\techo "${phy_ifname}_phyBandSelect=1"
 \t\t_d_ht40=$(grep '^HW_WLAN1_TX_POWER_DIFF_HT40_2S=' "$_cal_tmp" | head -n1 | cut -d= -f2); [ -z "$_d_ht40" ] && _d_ht40="0000000000000000000000000000"
 \t\t_wmac2g=$(grep '^HW_WLAN1_WLAN_ADDR=' "$_cal_tmp" | head -n1 | cut -d= -f2 | sed 's/../&:/g;s/:$//' | tr 'A-F' 'a-f')
 \t\trm -f "$_cal_tmp"
-\t\t[ -z "$macaddr" ] && [ -n "$_wmac2g" ] && macaddr="$_wmac2g"
+\t\tcase "$_wmac2g" in [0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;; *) _wmac2g="50:0f:f5:00:00:02" ;; esac
+\t\t[ -z "$macaddr" ] && macaddr="$_wmac2g"
 \t\techo "${phy_ifname}_xcap=$_xcap"
 \t\techo "${phy_ifname}_ther=$_ther"
 \t\techo "${phy_ifname}_rfe_type=5"
@@ -263,7 +488,10 @@ cal_snippet = """\t\techo "${phy_ifname}_phyBandSelect=1"
 \t\techo "${phy_ifname}_pwrdiffHT40_2S=$_d_ht40"
 \t\techo "${phy_ifname}_shortGI20M=1"
 \t\techo "${phy_ifname}_shortGI40M=1"
-\t\techo "${phy_ifname}_ampdu=1" """
+\t\techo "${phy_ifname}_ampdu=1"
+\t\techo "${phy_ifname}_manual_edca=1"
+\t\techo "${phy_ifname}_disable_txsc=1"
+\t\t[ "$noscan" = "1" ] && echo "${phy_ifname}_coexist=0" """
 assert '\t\techo "${phy_ifname}_phyBandSelect=1"' in s
 s = s.replace('\t\techo "${phy_ifname}_phyBandSelect=1"', cal_snippet, 1)
 open(p_drv, "w", encoding="utf-8").write(s)
@@ -283,7 +511,7 @@ ac10_upg = """\ttenda,ac10-v1)
 \tgwr1200ac-v1)"""
 s = s.replace("\tgwr1200ac-v1)", ac10_upg, 1)
 open(p_upg, "w", encoding="utf-8").write(s)
-print("  [OK] Customized SquashFS rootfs scripts for Tenda AC10 V1.0")
+print("  [OK] Customized SquashFS rootfs scripts & patched rtw88_8822b.ko for Tenda AC10 V1.0")
 PYEOF
 
     mksquashfs "$STAGE_DIR/sqfs_root" "$STAGE_DIR/ac10_rootfs.squashfs" \
@@ -303,7 +531,7 @@ lzma_padded = open(os.path.join(stage_dir, "kernel_lzma_padded.bin"), "rb").read
 tail_fakeroot = open(os.path.join(stage_dir, "loader_tail_and_fakeroot.bin"), "rb").read()
 sqfs = open(os.path.join(stage_dir, "ac10_rootfs.squashfs"), "rb").read()
 
-# Verify exact offsets: 16 (cvimg) + 0x1824 (stub) + 0x19F1E8 (lzma) + 0xF868 (tail_fakeroot) == 0x1B0284
+# Verify exact offsets: 16 (cvimg) + 0x1824 (stub) + 0x1A31E8 (lzma) + 0xB868 (tail_fakeroot) == 0x1B0284
 assert 16 + len(stub) + len(lzma_padded) + len(tail_fakeroot) == 0x1B0284
 
 # Pad SquashFS to 4 KB boundary
@@ -329,16 +557,19 @@ webupgrade_path = os.path.join(out_dir, "tenda-ac10-v1-hybrid-openwrt-4.14-webup
 open(factory_path, "wb").write(cs6c_img)
 open(sysupgrade_path, "wb").write(cs6c_img)
 
-# Construct 64-byte Tenda 'trx2' (fw_type == 2) Web UI header verified against libcommon.so:
-# - check_fw_valid(2): ntohl(*(uint32_t*)(hdr + 0x24)) == 0x00030028
-# - check_mtd_size(2): st_size < 0x7B0000 (8,060,928 B)
-# - check_fw_crc(2):   ntohl(*(uint32_t*)(hdr + 0x0C)) == len(cs6c_img)
-#                      ntohl(*(uint32_t*)(hdr + 0x18)) == zlib.crc32(cs6c_img, 0) & 0xFFFFFFFF
-# - upgradefw(2):      hdr[0x28:0x40] == 0 -> write_mtd(fp, 0x40, len(cs6c_img), "KernelFS") @ 0x030000
+# Construct 64-byte Tenda 'trx2' (fw_type == 2) Web UI header verified against libcommon.so & booter_stage2:
+# - check_fw_type @ 0x00010cd8:  ntohl(*(uint32_t*)(hdr + 0x00)) == 0x27051956 (IH_MAGIC)
+# - check_fw_type @ 0x00010d10:  *(uint8_t*)(hdr + 0x20) == 0x02 (ih_os == 2 -> returns fw_type = 2)
+# - check_fw_valid(2) @ 0x12484: ntohl(*(uint32_t*)(hdr + 0x24)) == 0x00030028 (AC10 V1.0 policy version)
+# - check_mtd_size(2) @ 0x11cfc: st_size < 0x7B0000 (8,060,928 B)
+# - check_fw_crc(2) @ 0x119d8:   ntohl(*(uint32_t*)(hdr + 0x0C)) == len(cs6c_img)
+#                     0x11ab0:   ntohl(*(uint32_t*)(hdr + 0x18)) == zlib.crc32(cs6c_img, 0) & 0xFFFFFFFF
+# - AutoBurn @ 0x80001b84:       booter_stage2 ALSO auto-skips 64-byte 0x27051956 header during TFTP!
 trx2_hdr = bytearray(64)
-trx2_hdr[0x00:0x04] = b"TRX2"
+struct.pack_into(">I", trx2_hdr, 0x00, 0x27051956)
 struct.pack_into(">I", trx2_hdr, 0x0C, len(cs6c_img))
 struct.pack_into(">I", trx2_hdr, 0x18, zlib.crc32(cs6c_img, 0) & 0xFFFFFFFF)
+trx2_hdr[0x20] = 0x02
 struct.pack_into(">I", trx2_hdr, 0x24, 0x00030028)
 web_img = bytes(trx2_hdr) + cs6c_img
 assert len(web_img) < 0x7B0000
@@ -350,8 +581,7 @@ PYEOF
     rm -rf "$STAGE_DIR"
 else
 
-# ADCDS/openwrt-dlink-dir842-r1 is an overlay repo (./files/target/linux/realtek/...)
-# atop ggbruno/openwrt @ 8a0ccb93f3431bcf8f5c5d03d4acc2c8e442de67. Bootstrap base if needed:
+# Full source build path (FULL_SOURCE_BUILD=1)
 if [ ! -f "./scripts/feeds" ] && [ -d "./files/target/linux/realtek" ]; then
     echo "[1.5/7] Bootstrapping ggbruno/openwrt (8a0ccb9) base tree and applying ADCDS overlay..."
     git clone https://github.com/ggbruno/openwrt.git _ggbruno_base
@@ -405,51 +635,24 @@ PYEOF
 fi
 
 echo "[3/7] Installing POSIX mtd1 RF calibration injector (/bin/set-mib.sh)..."
-mkdir -p files/bin files/etc/init.d
+mkdir -p files/bin files/usr/sbin files/etc/init.d
 cp -v "$SCRIPT_DIR/set-mib.sh" files/bin/set-mib.sh
 chmod +x files/bin/set-mib.sh
+ln -sf /bin/set-mib.sh files/usr/sbin/set-mib.sh
 
 cat > files/etc/init.d/ac10-hwparams << 'EOF'
 #!/bin/sh /etc/rc.common
 START=18
+start() {
+    /bin/set-mib.sh
+}
 boot() {
     /bin/set-mib.sh
 }
 EOF
 chmod +x files/etc/init.d/ac10-hwparams
 
-echo "[4/7] Enabling Dual-Band rtl8192cd (RTL8822BE RFE_TYPE_6 + RTL8197FS RFE_TYPE_5)..."
-RTL_MK="$(find . -path '*/drivers/net/wireless/rtl8192cd/Makefile' | head -n 1)"
-if [ -n "$RTL_MK" ]; then
-    # Uncomment ADCDS '# (G4)' 8822BE make variables & ccflags-y and set Tenda AC10 V1.0 RFE types in-place
-    sed -i \
-        -e 's/^# *[(]G4[)] *CONFIG_BAND_5G_ON_WLAN0.*/CONFIG_BAND_5G_ON_WLAN0=y/' \
-        -e 's/^CONFIG_BAND_2G_ON_WLAN0=y/# CONFIG_BAND_2G_ON_WLAN0=y/' \
-        -e 's/^# *[(]G4[)] *CONFIG_RTL_5G_SLOT_0.*/CONFIG_RTL_5G_SLOT_0=y/' \
-        -e 's/^# *[(]G4[)] *CONFIG_SLOT_0_8822BE.*/CONFIG_SLOT_0_8822BE=y/' \
-        -e 's/^# *[(]G4[)] *CONFIG_SLOT_0_RFE_TYPE_10.*/CONFIG_SLOT_0_RFE_TYPE_6=y\nCONFIG_SLOT_0_EXT_PA=y\nCONFIG_SLOT_0_EXT_LNA=y/' \
-        -e 's/^# *[(]G4[)] *CONFIG_SLOT_0_TX_BEAMFORMING.*/CONFIG_SLOT_0_TX_BEAMFORMING=y/' \
-        -e 's/^CONFIG_SOC_RFE_TYPE_0=y/CONFIG_SOC_RFE_TYPE_5=y\nCONFIG_SLOT_1_8197F=y\nCONFIG_SLOT_1_RFE_TYPE_5=y\nCONFIG_SOC_EXT_PA=y\nCONFIG_SOC_EXT_LNA=y\nCONFIG_SOC_TX_BEAMFORMING=y/' \
-        -e 's/^# *[(]G4[)] *CONFIG_USE_PCIE_SLOT_0.*/CONFIG_USE_PCIE_SLOT_0=y/' \
-        -e 's/^CONFIG_WIRELESS_LAN_MODULE=y/# CONFIG_WIRELESS_LAN_MODULE=y/' \
-        -e 's/^# *[(]G4[)] *CONFIG_WLAN_HAL_8822BE.*/CONFIG_WLAN_HAL_8822BE=y/' \
-        -e 's/^# *CONFIG_WLAN_HAL_8822BE.*/CONFIG_WLAN_HAL_8822BE=y/' \
-        -e 's/^# *CONFIG_WLAN_MACHAL_API=y/CONFIG_WLAN_MACHAL_API=y/' \
-        -e 's/^# *[(]G4[)] *ccflags-y += -DCONFIG_BAND_5G_ON_WLAN0/ccflags-y += -DCONFIG_BAND_5G_ON_WLAN0/' \
-        -e 's/^ccflags-y += -DCONFIG_BAND_2G_ON_WLAN0/# ccflags-y += -DCONFIG_BAND_2G_ON_WLAN0/' \
-        -e 's/^# *[(]G4[)] *ccflags-y += -DCONFIG_RTL_5G_SLOT_0/ccflags-y += -DCONFIG_RTL_5G_SLOT_0/' \
-        -e 's/^# *[(]G4[)] *ccflags-y += -DCONFIG_SLOT_0_8822BE/ccflags-y += -DCONFIG_SLOT_0_8822BE/' \
-        -e 's/^# *[(]G4[)] *ccflags-y += -DCONFIG_SLOT_0_RFE_TYPE_10/ccflags-y += -DCONFIG_SLOT_0_RFE_TYPE_6 -DCONFIG_SLOT_0_EXT_PA -DCONFIG_SLOT_0_EXT_LNA/' \
-        -e 's/^# *[(]G4[)] *ccflags-y += -DCONFIG_SLOT_0_TX_BEAMFORMING/ccflags-y += -DCONFIG_SLOT_0_TX_BEAMFORMING/' \
-        -e 's/^ccflags-y += -DCONFIG_SOC_RFE_TYPE_0/ccflags-y += -DCONFIG_SOC_RFE_TYPE_5 -DCONFIG_SLOT_1_8197F -DCONFIG_SLOT_1_RFE_TYPE_5 -DCONFIG_SOC_EXT_PA -DCONFIG_SOC_EXT_LNA -DCONFIG_SOC_TX_BEAMFORMING/' \
-        -e 's/^# *[(]G4[)] *ccflags-y += -DCONFIG_USE_PCIE_SLOT_0/ccflags-y += -DCONFIG_USE_PCIE_SLOT_0/' \
-        -e 's/^ccflags-y += -DCONFIG_WIRELESS_LAN_MODULE/# ccflags-y += -DCONFIG_WIRELESS_LAN_MODULE/' \
-        -e 's/^# *[(]G4[)] *ccflags-y += -DCONFIG_WLAN_HAL_8822BE/ccflags-y += -DCONFIG_WLAN_HAL_8822BE/' \
-        -e 's/^# *[(]G4[)] *ccflags-y += -DCONFIG_WLAN_MACHAL_API.*/ccflags-y += -DCONFIG_WLAN_MACHAL_API/' \
-        "$RTL_MK"
-fi
-
-echo "[5/7] Applying Hybrid OpenWrt 4.14 Config Overrides & Updating Feeds..."
+echo "[4/7] Applying Hybrid OpenWrt 4.14 Config Overrides & Updating Feeds..."
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 grep -E '^[+-]?(CONFIG_|# CONFIG_)' "$SCRIPT_DIR/kernel-4.14.config.diff" | sed 's/^[+-]//' > .config
@@ -460,13 +663,13 @@ fi
 grep -E '^[+-]?(CONFIG_|# CONFIG_)' "$SCRIPT_DIR/kernel-4.14.config.diff" | sed 's/^[+-]//' >> target/linux/realtek/rtl8197f/config-4.14
 make defconfig
 
-echo "[6/7] Building Tenda AC10 V1.0 Hybrid OpenWrt image (cs6c @ 0x00030000) with -j${JOBS}..."
+echo "[5/7] Building Tenda AC10 V1.0 Hybrid OpenWrt image (cs6c @ 0x00030000) with -j${JOBS}..."
 make -j"$JOBS" V=s
 fi
 
-echo "[7/7] Validating output images against Realtek Booter v3.4.11B.9 AutoBurn (0x800019d0) rules..."
+echo "[7/7] Validating output images against Realtek Booter v3.4.11B.9 AutoBurn (0x800019d0) & libcommon.so rules..."
 python3 - << 'PYEOF'
-import glob, os, struct
+import glob, os, struct, zlib
 
 def sum16_be(data: bytes) -> int:
     return sum(struct.unpack(f">{len(data)//2}H", data)) & 0xFFFF
@@ -477,39 +680,48 @@ if not bins:
 
 for path in bins:
     raw = open(path, "rb").read()
-    if len(raw) < 32:
+    if len(raw) < 64:
         raise SystemExit(f"ERROR: {path} too small ({len(raw)} B)")
-    magic = raw[:4]
-    start_addr, burn_addr, seg_len = struct.unpack_from(">III", raw, 4)
+    magic_u32, = struct.unpack_from(">I", raw, 0)
+    inner = raw
+    if magic_u32 == 0x27051956:
+        ih_size, = struct.unpack_from(">I", raw, 0x0C)
+        ih_dcrc, = struct.unpack_from(">I", raw, 0x18)
+        ih_os = raw[0x20]
+        ih_ver, = struct.unpack_from(">I", raw, 0x24)
+        inner = raw[64:]
+        assert ih_os == 2, f"{path}: ih_os={ih_os} != 2"
+        assert ih_ver == 0x00030028, f"{path}: ih_ver=0x{ih_ver:08X} != 0x00030028"
+        assert ih_size == len(inner), f"{path}: ih_size={ih_size} != payload {len(inner)}"
+        assert ih_dcrc == (zlib.crc32(inner, 0) & 0xFFFFFFFF), f"{path}: ih_dcrc mismatch!"
+        assert len(raw) < 0x7B0000, f"{path}: webupgrade size >= 0x7B0000!"
+        print(f"[PASS] {path}: valid 64-byte Tenda 0x27051956 trx2 wrapper (ih_ver=0x00030028, crc32=0x{ih_dcrc:08X})")
+
+    magic = inner[:4]
+    start_addr, burn_addr, seg_len = struct.unpack_from(">III", inner, 4)
     if magic not in (b"cs6c", b"cr6c"):
-        print(f"[SKIP non-cvimg] {path} (magic={magic!r})")
-        continue
-    # CRITICAL GUARD against Realtek Booter v3.4.11B.9 bug @ 0x80001c2c:
-    # A 2-segment 'cs6c' + 'hsqs' image sets $s7=0 on iteration 2 and erases 0x00000000!
-    # Repack any multi-segment 'cs6c' into a single-segment 'cs6c' wrapping the full payload.
-    if magic == b"cs6c" and len(raw) > 16 + seg_len + 4:
+        raise SystemExit(f"ERROR: {path} unexpected inner magic {magic!r}")
+    if magic == b"cs6c" and len(inner) > 16 + seg_len + 4 and magic_u32 != 0x27051956:
         print(f"[FIXUP] Repacking multi-segment cs6c -> single-segment cs6c for {path}...")
-        payload = bytearray(raw[16:])
+        payload = bytearray(inner[16:])
         if len(payload) % 2 == 1:
             payload.append(0x00)
-        # Append 2-byte big-endian cvimg checksum so 16-bit BE word sum == 0x0000
-        cur_sum = sum16_be(bytes(payload))
-        chk = (-cur_sum) & 0xFFFF
+        chk = (-sum16_be(bytes(payload))) & 0xFFFF
         payload.extend(struct.pack(">H", chk))
         seg_len = len(payload)
-        raw = b"cs6c" + struct.pack(">III", 0x80A00000, 0x00030000, seg_len) + bytes(payload)
-        open(path, "wb").write(raw)
+        inner = b"cs6c" + struct.pack(">III", 0x80A00000, 0x00030000, seg_len) + bytes(payload)
+        open(path, "wb").write(inner)
 
     assert burn_addr == 0x00030000, f"{path}: unsafe burnAddr 0x{burn_addr:08X} != 0x00030000"
     assert start_addr == 0x80A00000, f"{path}: unexpected startAddr 0x{start_addr:08X} != 0x80A00000"
-    assert 0x00030000 + len(raw) <= 0x007E0000, f"{path}: size {len(raw)} overflows 7,872 KB firmware slot!"
-    assert sum16_be(raw[16:16+seg_len]) == 0, f"{path}: 16-bit BE cvimg checksum != 0x0000!"
+    assert 0x00030000 + len(inner) <= 0x007E0000, f"{path}: size {len(inner)} overflows 7,872 KB firmware slot!"
+    assert sum16_be(inner[16:16+seg_len]) == 0, f"{path}: 16-bit BE cvimg checksum != 0x0000!"
     if magic == b"cs6c":
-        assert len(raw) <= 16 + seg_len + 4, f"{path}: LETHAL multi-segment cs6c still present!"
-    print(f"[PASS] {path}: {magic.decode()} single-safe, burn=0x{burn_addr:06X}, size={len(raw):,} B, csum=0x0000")
+        assert len(inner) <= 16 + seg_len + 4, f"{path}: LETHAL multi-segment cs6c still present!"
+    print(f"[PASS] {path}: {magic.decode()} single-safe, burn=0x{burn_addr:06X}, size={len(inner):,} B, csum=0x0000")
 PYEOF
 
 echo "=============================================================================="
 echo "BUILD & BOOTLOADER SAFETY VALIDATION COMPLETE! Images in: $WORK_DIR/openwrt-hybrid/bin/targets/"
-find bin/targets/ -type f -name "*.bin" -exec ls -lh {} +
+find bin/targets/ -type f \( -name "*.bin" -o -name "*.dtb" \) -exec ls -lh {} +
 echo "=============================================================================="

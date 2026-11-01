@@ -2,37 +2,37 @@ name: Build Tenda AC10 V1.0 Hybrid OpenWrt 4.14
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'build_hybrid_openwrt_ac10.sh'
+      - 'set-mib.sh'
+      - 'tenda-ac10-v1.dts'
+      - 'kernel-4.14.config.diff'
+      - '.github/workflows/build-ac10-hybrid-openwrt.yml'
 
 jobs:
   build-firmware:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout Hybrid Kit Repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Free Disk Space & Install OpenWrt Build Prerequisites
+      - name: Install OpenWrt & SquashFS/DTC Prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential ccache ecj fastjar file g++ gawk \
-            gettext git java-propose-classpath libelf-dev libncurses5-dev \
-            libncursesw5-dev libssl-dev python2 python3 python3-distutils-extra \
-            rsync squashfs-tools subversion swig time unzip wget xz-utils xsltproc \
+          sudo apt-get install -y build-essential file gawk gcc gettext git \
+            libelf-dev libssl-dev python3 squashfs-tools unzip wget xz-utils \
             zlib1g-dev device-tree-compiler
 
-      - name: Build Hybrid OpenWrt 4.14 (HWNAT 940Mbps + rtl8192cd 867Mbps)
+      - name: Build Tenda AC10 V1.0 Hybrid OpenWrt 4.14 Images
         run: |
-          if [ -f "Tenda_AC10_V1_Hybrid_Kit/build_hybrid_openwrt_ac10.sh" ]; then
-            chmod +x Tenda_AC10_V1_Hybrid_Kit/build_hybrid_openwrt_ac10.sh
-            bash Tenda_AC10_V1_Hybrid_Kit/build_hybrid_openwrt_ac10.sh
-          else
-            chmod +x ./build_hybrid_openwrt_ac10.sh
-            bash ./build_hybrid_openwrt_ac10.sh
-          fi
+          chmod +x ./build_hybrid_openwrt_ac10.sh ./set-mib.sh
+          bash ./build_hybrid_openwrt_ac10.sh
 
-      - name: Upload Compiled Tenda AC10 V1.0 Firmware Artifact
+      - name: Upload Compiled Tenda AC10 V1.0 Firmware & DTB Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: tenda-ac10-v1-hybrid-openwrt-4.14
           path: |
-            Tenda_AC10_V1_Hybrid_Kit/build_tree/openwrt-hybrid/bin/targets/**/*.bin
             build_tree/openwrt-hybrid/bin/targets/**/*.bin
+            build_tree/openwrt-hybrid/bin/targets/**/*.dtb
