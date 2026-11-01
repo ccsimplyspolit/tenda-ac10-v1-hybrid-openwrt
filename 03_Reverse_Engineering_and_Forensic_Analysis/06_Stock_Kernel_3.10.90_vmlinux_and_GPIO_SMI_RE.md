@@ -1,6 +1,6 @@
 # Handoff Report: Deep Static Analysis & Reverse Engineering of Tenda AC10 V1.0 Stock Kernel
 
-- **Target File**: `C:\Users\sshunko\.gemini\antigravity\brain\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin`
+- **Target File**: `/workspace/analysis\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin`
 - **Binary Size**: 7,253,712 bytes (6.92 MB)
 - **Investigation Type**: Read-only static reverse engineering & kernel symbol/driver reconstruction
 - **Deliverable**: Architectural blueprint and hardware parameter specification for OpenWrt porting (DTS, switch pinout, RF calibration layout, and hardware NAT subsystem)

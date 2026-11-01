@@ -87,7 +87,7 @@ Direct extraction from live hardware at `http://192.168.0.1` and extracted syste
    - DNS: `1.1.1.1`, `1.1.1.1`.
    - Cloned WAN MAC: `<YOUR_WAN_MAC>` (ISP MAC bound).
    - Native Hardware LAN MAC: `50:0F:F5:00:00:00`.
-   - Legacy stored VPN credentials in NVRAM: `<YOUR_VPN_USER>` / `VEGqRxiYGU` / `<YOUR_VPN_SERVER>` (`vpnClient: "0"` - currently inactive).
+   - Legacy stored VPN credentials in NVRAM: `<YOUR_VPN_USER>` / `REDACTED_PPTP_PASSWORD` / `<YOUR_VPN_SERVER>` (`vpnClient: "0"` - currently inactive).
 
 5. **Official & Community Firmware Sources**:
    - Tenda Global Download Portal (`tendacn.com/material/show/103782`): Lists `V15.03.06.48` as official security patch release.

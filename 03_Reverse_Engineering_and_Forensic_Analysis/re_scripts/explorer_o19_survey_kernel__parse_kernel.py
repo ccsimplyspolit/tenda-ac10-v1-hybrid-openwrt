@@ -1,7 +1,7 @@
 import struct
 import sys
 
-KERNEL_BIN = r"C:\Users\sshunko\.gemini\antigravity\brain\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin"
+KERNEL_BIN = r"/workspace/analysis\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin"
 
 def main():
     with open(KERNEL_BIN, "rb") as f:

@@ -2,7 +2,7 @@ import sys
 import os
 import capstone
 
-BIN_PATH = r'C:\Users\sshunko\.gemini\antigravity\brain\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin'
+BIN_PATH = r'/workspace/analysis\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin'
 SYM_PATH = r'K:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_kernel\vmlinux_symbols.txt'
 LOAD_BASE = 0x80000000
 

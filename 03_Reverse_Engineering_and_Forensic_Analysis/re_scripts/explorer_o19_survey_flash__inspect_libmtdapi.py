@@ -1,6 +1,6 @@
 import re
 
-ROOT = r"C:\Users\sshunko\.gemini\antigravity\brain\21647d8e-3d9c-493f-900f-f13429d32667\scratch\squashfs_root"
+ROOT = r"/workspace/analysis\21647d8e-3d9c-493f-900f-f13429d32667\scratch\squashfs_root"
 fpath = ROOT + r"\lib\libmtdapi.so"
 
 with open(fpath, "rb") as f:

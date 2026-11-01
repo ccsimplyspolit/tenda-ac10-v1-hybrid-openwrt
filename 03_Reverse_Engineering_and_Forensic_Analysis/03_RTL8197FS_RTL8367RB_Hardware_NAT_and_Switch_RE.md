@@ -1,6 +1,6 @@
 # Technical Handoff Report: Deep Static Reverse Engineering of rtl865x ASIC HW NAT & RTL8367 Switch Driver in Stock Kernel
 
-- **Target Binary**: `C:\Users\sshunko\.gemini\antigravity\brain\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin` (7,253,712 bytes, MIPS32 LE Linux 3.10.90, virtual base `0x80000000`)
+- **Target Binary**: `/workspace/analysis\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin` (7,253,712 bytes, MIPS32 LE Linux 3.10.90, virtual base `0x80000000`)
 - **Symbol Table**: `K:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_kernel\vmlinux_symbols.txt` (31,434 recovered symbols)
 - **Investigating Agent**: `explorer_driver_hwnat_re`
 - **Working Directory**: `K:\aoe4_dlc\.agents\teamwork\explorer_driver_hwnat_re\`

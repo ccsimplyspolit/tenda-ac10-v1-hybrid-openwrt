@@ -98,7 +98,7 @@ dtb_off = 0x5335BC
 assert vm_dtb[dtb_off:dtb_off+4] == b"\xd0\x0d\xfe\xed", "DTB magic not at 0x5335BC"
 vmlinux = vm_dtb[:dtb_off]
 
-# Apply 8 verified MIPS32 LE binary patches for Tenda AC10 V1.0 Switch/VLAN/ASIC Port Map:
+# Apply 9 verified MIPS32 LE binary patches for Tenda AC10 V1.0 Switch/VLAN/ASIC Port Map:
 # Physical WAN = Switch Port 3 (mask 0x08), Physical LAN1..LAN3 = Switch Ports 2,1,0 (mask 0x07)
 patches = [
     (0x29A4DC, 0x2405010F, 0x24050107, "sw_add_vlan_fid LAN member=0x107 (Ports 0,1,2 + CPU8)"),
@@ -109,6 +109,7 @@ patches = [
     (0x29A54C, 0x008B2025, 0x008A2024, "and $a0, $a0, $t2 (mask upper 16 bits 0xF000FFFF)"),
     (0x29A870, 0x1000FF37, 0x1000FF34, "b 0x8029A544 (route odd WAN port 3 PVID=1 to upper-halfword)"),
     (0x5084D0, 0x00000010, 0x00000008, "l2_mask_wan = 0x08 (Switch Port 3)"),
+    (0x5084D4, 0x00000004, 0x00000007, "l2_mask_lan = 0x07 (Switch Ports 0,1,2)"),
 ]
 for off, exp_old, new_val, desc in patches:
     cur, = struct.unpack_from("<I", vmlinux, off)
@@ -207,7 +208,7 @@ s = s.replace(
 )
 open(p_asic, "w", encoding="utf-8").write(s)
 
-# 5. /etc/uci-defaults/99-dir842-m5: Switch Port 3 = WAN (vlan 1), Ports 0,1,2 = LAN (vlan 2), Tenda SSID/MAC
+# 5. /etc/uci-defaults/99-dir842-m5: Switch Port 3 = WAN (vlan 1), Ports 0,1,2 = LAN (vlan 2), Tenda SSID/MAC, 5 GHz VHT80
 p_m5 = os.path.join(root, "etc/uci-defaults/99-dir842-m5")
 s = open(p_m5, "r", encoding="utf-8").read()
 assert "set network.@switch_vlan[-1].ports='4 6t'" in s
@@ -215,6 +216,7 @@ assert "set network.@switch_vlan[-1].ports='0 1 2 3 6t'" in s
 s = s.replace("set network.@switch_vlan[-1].ports='4 6t'", "set network.@switch_vlan[-1].ports='3 6t'")
 s = s.replace("set network.@switch_vlan[-1].ports='0 1 2 3 6t'", "set network.@switch_vlan[-1].ports='0 1 2 6t'")
 s = s.replace("set wireless.default_radio0.ssid='DIR842-OpenWrt'", "set wireless.default_radio0.ssid='Tenda-AC10-5G'")
+s = s.replace("set wireless.radio0.htmode='HT20'", "set wireless.radio0.htmode='VHT80'")
 s = s.replace(
     "DIR842_WIFI_MAC='02:11:22:33:44:56' ;;",
     "DIR842_WIFI_MAC=$(dd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr '\\0' '\\n' | grep '^HW_WLAN0_WLAN_ADDR=' | head -n1 | cut -d= -f2 | sed 's/../&:/g;s/:$//' | tr 'A-F' 'a-f')\n\t[ -z \"$DIR842_WIFI_MAC\" ] && DIR842_WIFI_MAC='50:0f:f5:00:00:05' ;;",
@@ -224,6 +226,31 @@ s = s.replace(
     "uci -q set system.@system[0].hostname='Tenda-AC10-V1'\nuci -q set system.@system[0].dir842_m5_seeded='1'",
 )
 open(p_m5, "w", encoding="utf-8").write(s)
+
+# 5b. /etc/uci-defaults/11_dir842-htmode-ht20: preserve VHT80 on Tenda AC10 V1.0 5 GHz radio0
+p_ht20 = os.path.join(root, "etc/uci-defaults/11_dir842-htmode-ht20")
+if os.path.exists(p_ht20):
+    open(p_ht20, "w", encoding="utf-8").write("#!/bin/sh\n# Tenda AC10 V1.0: keep 5 GHz radio0 at VHT80\nexit 0\n")
+
+# 5c. /lib/preinit/80_mount_root: auto-erase stale stock Tenda SquashFS bytes at rootfs_data (0x00580000) before mount_root
+p_mr = os.path.join(root, "lib/preinit/80_mount_root")
+s_mr = open(p_mr, "r", encoding="utf-8").read()
+rfd_guard = """do_mount_root() {
+\tlocal _rfd_mtd=$(sed -n 's/^\\(mtd[0-9]\\+\\):.*\\"rootfs_data\\"/\\1/p' /proc/mtd 2>/dev/null | head -n1)
+\tif [ -n "$_rfd_mtd" ] && [ -c "/dev/$_rfd_mtd" ]; then
+\t\tlocal _rfd_hdr=$(dd if="/dev/$_rfd_mtd" bs=4 count=1 2>/dev/null | hexdump -v -e '4/1 "%02x"')
+\t\tcase "$_rfd_hdr" in
+\t\t\t1985*|8519*|deadc0de|ffffffff|"") ;;
+\t\t\t*)
+\t\t\t\techo "ac10-preinit: formatting stale stock bytes on /dev/$_rfd_mtd (hdr=0x$_rfd_hdr) for JFFS2 overlay" > /dev/kmsg
+\t\t\t\tmtd erase rootfs_data 2>/dev/null || printf '\\xde\\xad\\xc0\\xde' | mtd write - rootfs_data 2>/dev/null
+\t\t\t\t;;
+\t\tesac
+\tfi
+\tmount_root"""
+assert "do_mount_root() {\n\tmount_root" in s_mr
+s_mr = s_mr.replace("do_mount_root() {\n\tmount_root", rfd_guard, 1)
+open(p_mr, "w", encoding="utf-8").write(s_mr)
 
 # 6. /etc/uci-defaults/09_wireless-dualband-dir842: 2.4G SSID = Tenda-AC10-2G, HT40
 p_w2 = os.path.join(root, "etc/uci-defaults/09_wireless-dualband-dir842")
@@ -330,15 +357,18 @@ open(factory_path, "wb").write(cs6c_img)
 open(sysupgrade_path, "wb").write(cs6c_img)
 
 # Construct 64-byte Tenda 'trx2' (fw_type == 2) Web UI header verified against libcommon.so:
-# - check_fw_valid(2): ntohl(*(uint32_t*)(hdr + 0x24)) == 0x00030028
-# - check_mtd_size(2): st_size < 0x7B0000 (8,060,928 B)
-# - check_fw_crc(2):   ntohl(*(uint32_t*)(hdr + 0x0C)) == len(cs6c_img)
-#                      ntohl(*(uint32_t*)(hdr + 0x18)) == zlib.crc32(cs6c_img, 0) & 0xFFFFFFFF
-# - upgradefw(2):      hdr[0x28:0x40] == 0 -> write_mtd(fp, 0x40, len(cs6c_img), "KernelFS") @ 0x030000
+# - check_fw_type @ 0x00010cd8:  ntohl(*(uint32_t*)(hdr + 0x00)) == 0x27051956 (IH_MAGIC)
+# - check_fw_type @ 0x00010d10:  *(uint8_t*)(hdr + 0x20) == 0x02 (ih_os == 2 -> returns fw_type = 2)
+# - check_fw_valid(2) @ 0x12484: ntohl(*(uint32_t*)(hdr + 0x24)) == 0x00030028
+# - check_mtd_size(2):           st_size < 0x7B0000 (8,060,928 B)
+# - check_fw_crc(2) @ 0x119d8:   ntohl(*(uint32_t*)(hdr + 0x0C)) == len(cs6c_img)
+#                     0x11ab0:   ntohl(*(uint32_t*)(hdr + 0x18)) == zlib.crc32(cs6c_img, 0) & 0xFFFFFFFF
+# - upgradefw(2):                hdr[0x28:0x40] == 0 -> write_mtd('/var/image', "KernelFS") skips 0x40 & writes to 0x030000
 trx2_hdr = bytearray(64)
-trx2_hdr[0x00:0x04] = b"TRX2"
+struct.pack_into(">I", trx2_hdr, 0x00, 0x27051956)
 struct.pack_into(">I", trx2_hdr, 0x0C, len(cs6c_img))
 struct.pack_into(">I", trx2_hdr, 0x18, zlib.crc32(cs6c_img, 0) & 0xFFFFFFFF)
+trx2_hdr[0x20] = 0x02
 struct.pack_into(">I", trx2_hdr, 0x24, 0x00030028)
 web_img = bytes(trx2_hdr) + cs6c_img
 assert len(web_img) < 0x7B0000

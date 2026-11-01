@@ -1,7 +1,7 @@
 import os
 import glob
 
-ROOT = r"C:\Users\sshunko\.gemini\antigravity\brain\21647d8e-3d9c-493f-900f-f13429d32667\scratch\squashfs_root"
+ROOT = r"/workspace/analysis\21647d8e-3d9c-493f-900f-f13429d32667\scratch\squashfs_root"
 
 print("--- 1. Listing etc_ro/init.d ---")
 initd = os.path.join(ROOT, "etc_ro", "init.d")

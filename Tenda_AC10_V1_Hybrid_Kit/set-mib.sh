@@ -133,142 +133,169 @@ if [ -n "$MAC_ETH_RAW" ]; then
 fi
 
 # ==============================================================================
-# 6. Program wlan0 (5 GHz RTL8822BE + Skyworth RFE Type 6)
+# 6 & 7. Program Wireless Interfaces (Monolithic Dual-rtl8192cd vs Hybrid rtw88+rtl8192cd)
 # ==============================================================================
-if ifconfig wlan0 down 2>/dev/null; then
-    logger -t set-mib "Configuring wlan0 (5 GHz 802.11ac)..."
+if [ -e /proc/wlan0/mib_all ] && [ -e /proc/wlan1/mib_all ]; then
+    # --- Monolithic Dual-rtl8192cd Mode: wlan0 = 5 GHz (RTL8822BE), wlan1 = 2.4 GHz (RTL8197FS) ---
+    if ifconfig wlan0 down 2>/dev/null; then
+        logger -t set-mib "Configuring wlan0 (5 GHz 802.11ac)..."
 
-    # Set Hardware MAC Address
-    if [ -n "$MAC_5G_RAW" ]; then
-        MAC_5G=$(format_mac "$MAC_5G_RAW")
-        ifconfig wlan0 hw ether "$MAC_5G"
-        logger -t set-mib "wlan0 MAC set to $MAC_5G"
+        # Set Hardware MAC Address
+        if [ -n "$MAC_5G_RAW" ]; then
+            MAC_5G=$(format_mac "$MAC_5G_RAW")
+            ifconfig wlan0 hw ether "$MAC_5G"
+            logger -t set-mib "wlan0 MAC set to $MAC_5G"
+        fi
+
+        # Crystal Oscillator Frequency Tuning (BB Register 0x2C)
+        iwpriv wlan0 set_mib xcap="$XCAP_5G"
+        iwpriv wlan0 set_mib share_xcap=0
+        logger -t set-mib "wlan0 xcap set to $XCAP_5G"
+
+        # Thermal Tracking Baseline (Register 0x87C)
+        iwpriv wlan0 set_mib ther="$THER_5G"
+        logger -t set-mib "wlan0 ther baseline set to $THER_5G"
+
+        # Skyworth RFE Type 6 External PA / LNA Enable (Registers 0x82C, 0x830, 0x838)
+        iwpriv wlan0 set_mib rfe_type=6
+        logger -t set-mib "wlan0 RFE Type set to 6 (Skyworth External FEM active)"
+
+        # 196-Channel 5 GHz Power Tables & 20/40/80/160 MHz Diffs
+        if [ -n "$PWR_5G_HT40_A" ]; then
+            iwpriv wlan0 set_mib pwrlevel5GHT40_1S_A="$PWR_5G_HT40_A"
+        fi
+        if [ -n "$PWR_5G_HT40_B" ]; then
+            iwpriv wlan0 set_mib pwrlevel5GHT40_1S_B="$PWR_5G_HT40_B"
+        fi
+        if [ -n "$DIFF_5G_40_20_A" ]; then
+            iwpriv wlan0 set_mib pwrdiff_5G_40BW2S_20BW2S_A="$DIFF_5G_40_20_A"
+        fi
+        if [ -n "$DIFF_5G_40_20_B" ]; then
+            iwpriv wlan0 set_mib pwrdiff_5G_40BW2S_20BW2S_B="$DIFF_5G_40_20_B"
+        fi
+        if [ -n "$DIFF_5G_20_OFDM_A" ]; then
+            iwpriv wlan0 set_mib pwrdiff_5G_20BW1S_OFDM1T_A="$DIFF_5G_20_OFDM_A"
+        fi
+        if [ -n "$DIFF_5G_20_OFDM_B" ]; then
+            iwpriv wlan0 set_mib pwrdiff_5G_20BW1S_OFDM1T_B="$DIFF_5G_20_OFDM_B"
+        fi
+        if [ -n "$DIFF_5G_80_1S_A" ]; then
+            iwpriv wlan0 set_mib pwrdiff_5G_80BW1S_160BW1S_A="$DIFF_5G_80_1S_A"
+        fi
+        if [ -n "$DIFF_5G_80_2S_A" ]; then
+            iwpriv wlan0 set_mib pwrdiff_5G_80BW2S_160BW2S_A="$DIFF_5G_80_2S_A"
+        fi
+        if [ -n "$DIFF_5G_80_1S_B" ]; then
+            iwpriv wlan0 set_mib pwrdiff_5G_80BW1S_160BW1S_B="$DIFF_5G_80_1S_B"
+        fi
+        if [ -n "$DIFF_5G_80_2S_B" ]; then
+            iwpriv wlan0 set_mib pwrdiff_5G_80BW2S_160BW2S_B="$DIFF_5G_80_2S_B"
+        fi
+
+        # High-Performance 802.11ac VHT80 Parameters (verified against vmlinux MIB_TABLE)
+        iwpriv wlan0 set_mib band=76        # 802.11a/n/ac (4 + 8 + 64 = 76)
+        iwpriv wlan0 set_mib use40M=2       # 80 MHz channel width (0=20MHz, 1=40MHz, 2=80MHz)
+        iwpriv wlan0 set_mib shortGI20M=1   # Short Guard Interval (20 MHz)
+        iwpriv wlan0 set_mib shortGI40M=1   # Short Guard Interval (40 MHz)
+        iwpriv wlan0 set_mib shortGI80M=1   # Short Guard Interval (80 MHz)
+        iwpriv wlan0 set_mib ampdu=1        # A-MPDU aggregation
+        iwpriv wlan0 set_mib amsdu=1        # A-MSDU aggregation
+        iwpriv wlan0 set_mib txbf=1         # Beamforming master enable
+        iwpriv wlan0 set_mib txbfer=1       # Explicit SU Beamformer
+        iwpriv wlan0 set_mib txbfee=1       # SU Beamformee
+        iwpriv wlan0 set_mib txbf_mu=1      # Wave 2 MU-MIMO Beamforming
+        iwpriv wlan0 set_mib regdomain=1    # Numeric regulatory domain baseline (1=FCC / 3=ETSI)
+        iwpriv wlan0 set_mib regdomain="$REG_DOMAIN_5G"  # Dynamic numeric regulatory domain from mtd1
+        iwpriv wlan0 set_mib led_type=3     # Hardware LED trigger
+
+        ifconfig wlan0 up
+        logger -t set-mib "wlan0 initialized successfully at 866.7 Mbps line rate."
     fi
 
-    # Crystal Oscillator Frequency Tuning (BB Register 0x2C)
-    iwpriv wlan0 set_mib xcap="$XCAP_5G"
-    iwpriv wlan0 set_mib share_xcap=0
-    logger -t set-mib "wlan0 xcap set to $XCAP_5G"
+    if ifconfig wlan1 down 2>/dev/null; then
+        logger -t set-mib "Configuring wlan1 (2.4 GHz 802.11b/g/n)..."
 
-    # Thermal Tracking Baseline (Register 0x87C)
-    iwpriv wlan0 set_mib ther="$THER_5G"
-    logger -t set-mib "wlan0 ther baseline set to $THER_5G"
+        # Set Hardware MAC Address
+        if [ -n "$MAC_2G_RAW" ]; then
+            MAC_2G=$(format_mac "$MAC_2G_RAW")
+            ifconfig wlan1 hw ether "$MAC_2G"
+            logger -t set-mib "wlan1 MAC set to $MAC_2G"
+        fi
 
-    # Skyworth RFE Type 6 External PA / LNA Enable (Registers 0x82C, 0x830, 0x838)
-    iwpriv wlan0 set_mib rfe_type=6
-    logger -t set-mib "wlan0 RFE Type set to 6 (Skyworth External FEM active)"
+        # Crystal Oscillator Frequency Tuning (SoC Registers 0xb8000024 / 0xb8000028)
+        iwpriv wlan1 set_mib xcap="$XCAP_2G"
+        logger -t set-mib "wlan1 xcap set to $XCAP_2G"
 
-    # 196-Channel 5 GHz Power Tables & 20/40/80/160 MHz Diffs
-    if [ -n "$PWR_5G_HT40_A" ]; then
-        iwpriv wlan0 set_mib pwrlevel5GHT40_1S_A="$PWR_5G_HT40_A"
-    fi
-    if [ -n "$PWR_5G_HT40_B" ]; then
-        iwpriv wlan0 set_mib pwrlevel5GHT40_1S_B="$PWR_5G_HT40_B"
-    fi
-    if [ -n "$DIFF_5G_40_20_A" ]; then
-        iwpriv wlan0 set_mib pwrdiff_5G_40BW2S_20BW2S_A="$DIFF_5G_40_20_A"
-    fi
-    if [ -n "$DIFF_5G_40_20_B" ]; then
-        iwpriv wlan0 set_mib pwrdiff_5G_40BW2S_20BW2S_B="$DIFF_5G_40_20_B"
-    fi
-    if [ -n "$DIFF_5G_20_OFDM_A" ]; then
-        iwpriv wlan0 set_mib pwrdiff_5G_20BW1S_OFDM1T_A="$DIFF_5G_20_OFDM_A"
-    fi
-    if [ -n "$DIFF_5G_20_OFDM_B" ]; then
-        iwpriv wlan0 set_mib pwrdiff_5G_20BW1S_OFDM1T_B="$DIFF_5G_20_OFDM_B"
-    fi
-    if [ -n "$DIFF_5G_80_1S_A" ]; then
-        iwpriv wlan0 set_mib pwrdiff_5G_80BW1S_160BW1S_A="$DIFF_5G_80_1S_A"
-    fi
-    if [ -n "$DIFF_5G_80_2S_A" ]; then
-        iwpriv wlan0 set_mib pwrdiff_5G_80BW2S_160BW2S_A="$DIFF_5G_80_2S_A"
-    fi
-    if [ -n "$DIFF_5G_80_1S_B" ]; then
-        iwpriv wlan0 set_mib pwrdiff_5G_80BW1S_160BW1S_B="$DIFF_5G_80_1S_B"
-    fi
-    if [ -n "$DIFF_5G_80_2S_B" ]; then
-        iwpriv wlan0 set_mib pwrdiff_5G_80BW2S_160BW2S_B="$DIFF_5G_80_2S_B"
-    fi
+        # Thermal Tracking Baseline
+        iwpriv wlan1 set_mib ther="$THER_2G"
+        logger -t set-mib "wlan1 ther baseline set to $THER_2G"
 
-    # High-Performance 802.11ac VHT80 Parameters (verified against vmlinux MIB_TABLE)
-    iwpriv wlan0 set_mib band=76        # 802.11a/n/ac (4 + 8 + 64 = 76)
-    iwpriv wlan0 set_mib use40M=2       # 80 MHz channel width (0=20MHz, 1=40MHz, 2=80MHz)
-    iwpriv wlan0 set_mib shortGI20M=1   # Short Guard Interval (20 MHz)
-    iwpriv wlan0 set_mib shortGI40M=1   # Short Guard Interval (40 MHz)
-    iwpriv wlan0 set_mib shortGI80M=1   # Short Guard Interval (80 MHz)
-    iwpriv wlan0 set_mib ampdu=1        # A-MPDU aggregation
-    iwpriv wlan0 set_mib amsdu=1        # A-MSDU aggregation
-    iwpriv wlan0 set_mib txbf=1         # Beamforming master enable
-    iwpriv wlan0 set_mib txbfer=1       # Explicit SU Beamformer
-    iwpriv wlan0 set_mib txbfee=1       # SU Beamformee
-    iwpriv wlan0 set_mib txbf_mu=1      # Wave 2 MU-MIMO Beamforming
-    iwpriv wlan0 set_mib regdomain=1    # Numeric regulatory domain baseline (1=FCC / 3=ETSI)
-    iwpriv wlan0 set_mib regdomain="$REG_DOMAIN_5G"  # Dynamic numeric regulatory domain from mtd1
-    iwpriv wlan0 set_mib led_type=3     # Hardware LED trigger
+        # Skyworth RFE Type 5 External FEM Enable
+        iwpriv wlan1 set_mib rfe_type=5
+        logger -t set-mib "wlan1 RFE Type set to 5"
 
-    ifconfig wlan0 up
-    logger -t set-mib "wlan0 initialized successfully at 866.7 Mbps line rate."
-fi
+        # 2.4 GHz Power Tables & Bandwidth Diffs (verified against vmlinux MIB_TABLE)
+        if [ -n "$PWR_2G_CCK_A" ]; then
+            iwpriv wlan1 set_mib pwrlevelCCK_A="$PWR_2G_CCK_A"
+        fi
+        if [ -n "$PWR_2G_CCK_B" ]; then
+            iwpriv wlan1 set_mib pwrlevelCCK_B="$PWR_2G_CCK_B"
+        fi
+        if [ -n "$PWR_2G_HT40_A" ]; then
+            iwpriv wlan1 set_mib pwrlevelHT40_1S_A="$PWR_2G_HT40_A"
+        fi
+        if [ -n "$PWR_2G_HT40_B" ]; then
+            iwpriv wlan1 set_mib pwrlevelHT40_1S_B="$PWR_2G_HT40_B"
+        fi
+        if [ -n "$DIFF_2G_HT20" ]; then
+            iwpriv wlan1 set_mib pwrdiffHT20="$DIFF_2G_HT20"
+        fi
+        if [ -n "$DIFF_2G_OFDM" ]; then
+            iwpriv wlan1 set_mib pwrdiffOFDM="$DIFF_2G_OFDM"
+        fi
+        if [ -n "$DIFF_2G_HT40_2S" ]; then
+            iwpriv wlan1 set_mib pwrdiffHT40_2S="$DIFF_2G_HT40_2S"
+        fi
 
-# ==============================================================================
-# 7. Program wlan1 (2.4 GHz RTL8197FS SoC integrated + Skyworth RFE Type 5)
-# ==============================================================================
-if ifconfig wlan1 down 2>/dev/null; then
-    logger -t set-mib "Configuring wlan1 (2.4 GHz 802.11b/g/n)..."
+        # High-Performance 802.11n 40 MHz Parameters
+        iwpriv wlan1 set_mib band=11        # 802.11b/g/n (1 + 2 + 8 = 11)
+        iwpriv wlan1 set_mib use40M=1       # 40 MHz channel width (HT40)
+        iwpriv wlan1 set_mib shortGI20M=1   # Short GI (20 MHz)
+        iwpriv wlan1 set_mib shortGI40M=1   # Short GI (40 MHz)
+        iwpriv wlan1 set_mib ampdu=1        # A-MPDU aggregation
+        iwpriv wlan1 set_mib regdomain=1    # Numeric regulatory domain baseline (1=FCC / 3=ETSI)
+        iwpriv wlan1 set_mib regdomain="$REG_DOMAIN_2G"
 
-    # Set Hardware MAC Address
+        ifconfig wlan1 up
+        logger -t set-mib "wlan1 initialized successfully at 300.0 Mbps line rate."
+    fi
+elif [ -e /proc/wlan0/mib_all ]; then
+    # --- Hybrid rtw88 (5 GHz mac80211 wlan1) + rtl8192cd (2.4 GHz SoC wlan0) Mode ---
+    if [ -w /sys/module/rtw88_core/parameters/xtal_cap_override ]; then
+        echo "$XCAP_5G" > /sys/module/rtw88_core/parameters/xtal_cap_override 2>/dev/null || true
+        logger -t set-mib "rtw88 5 GHz xtal_cap_override set to $XCAP_5G"
+    fi
     if [ -n "$MAC_2G_RAW" ]; then
         MAC_2G=$(format_mac "$MAC_2G_RAW")
-        ifconfig wlan1 hw ether "$MAC_2G"
-        logger -t set-mib "wlan1 MAC set to $MAC_2G"
+        ifconfig wlan0 hw ether "$MAC_2G" 2>/dev/null || true
     fi
-
-    # Crystal Oscillator Frequency Tuning (SoC Registers 0xb8000024 / 0xb8000028)
-    iwpriv wlan1 set_mib xcap="$XCAP_2G"
-    logger -t set-mib "wlan1 xcap set to $XCAP_2G"
-
-    # Thermal Tracking Baseline
-    iwpriv wlan1 set_mib ther="$THER_2G"
-    logger -t set-mib "wlan1 ther baseline set to $THER_2G"
-
-    # Skyworth RFE Type 5 External FEM Enable
-    iwpriv wlan1 set_mib rfe_type=5
-    logger -t set-mib "wlan1 RFE Type set to 5"
-
-    # 2.4 GHz Power Tables & Bandwidth Diffs (verified against vmlinux MIB_TABLE)
-    if [ -n "$PWR_2G_CCK_A" ]; then
-        iwpriv wlan1 set_mib pwrlevelCCK_A="$PWR_2G_CCK_A"
-    fi
-    if [ -n "$PWR_2G_CCK_B" ]; then
-        iwpriv wlan1 set_mib pwrlevelCCK_B="$PWR_2G_CCK_B"
-    fi
-    if [ -n "$PWR_2G_HT40_A" ]; then
-        iwpriv wlan1 set_mib pwrlevelHT40_1S_A="$PWR_2G_HT40_A"
-    fi
-    if [ -n "$PWR_2G_HT40_B" ]; then
-        iwpriv wlan1 set_mib pwrlevelHT40_1S_B="$PWR_2G_HT40_B"
-    fi
-    if [ -n "$DIFF_2G_HT20" ]; then
-        iwpriv wlan1 set_mib pwrdiffHT20="$DIFF_2G_HT20"
-    fi
-    if [ -n "$DIFF_2G_OFDM" ]; then
-        iwpriv wlan1 set_mib pwrdiffOFDM="$DIFF_2G_OFDM"
-    fi
-    if [ -n "$DIFF_2G_HT40_2S" ]; then
-        iwpriv wlan1 set_mib pwrdiffHT40_2S="$DIFF_2G_HT40_2S"
-    fi
-
-    # High-Performance 802.11n 40 MHz Parameters
-    iwpriv wlan1 set_mib band=11        # 802.11b/g/n (1 + 2 + 8 = 11)
-    iwpriv wlan1 set_mib use40M=1       # 40 MHz channel width (HT40)
-    iwpriv wlan1 set_mib shortGI20M=1   # Short GI (20 MHz)
-    iwpriv wlan1 set_mib shortGI40M=1   # Short GI (40 MHz)
-    iwpriv wlan1 set_mib ampdu=1        # A-MPDU aggregation
-    iwpriv wlan1 set_mib regdomain=1    # Numeric regulatory domain baseline (1=FCC / 3=ETSI)
-    iwpriv wlan1 set_mib regdomain="$REG_DOMAIN_2G"
-
-    ifconfig wlan1 up
-    logger -t set-mib "wlan1 initialized successfully at 300.0 Mbps line rate."
+    iwpriv wlan0 set_mib xcap="$XCAP_2G" 2>/dev/null || true
+    iwpriv wlan0 set_mib ther="$THER_2G" 2>/dev/null || true
+    iwpriv wlan0 set_mib rfe_type=5 2>/dev/null || true
+    [ -n "$PWR_2G_CCK_A" ] && iwpriv wlan0 set_mib pwrlevelCCK_A="$PWR_2G_CCK_A" 2>/dev/null || true
+    [ -n "$PWR_2G_CCK_B" ] && iwpriv wlan0 set_mib pwrlevelCCK_B="$PWR_2G_CCK_B" 2>/dev/null || true
+    [ -n "$PWR_2G_HT40_A" ] && iwpriv wlan0 set_mib pwrlevelHT40_1S_A="$PWR_2G_HT40_A" 2>/dev/null || true
+    [ -n "$PWR_2G_HT40_B" ] && iwpriv wlan0 set_mib pwrlevelHT40_1S_B="$PWR_2G_HT40_B" 2>/dev/null || true
+    [ -n "$DIFF_2G_HT20" ] && iwpriv wlan0 set_mib pwrdiffHT20="$DIFF_2G_HT20" 2>/dev/null || true
+    [ -n "$DIFF_2G_OFDM" ] && iwpriv wlan0 set_mib pwrdiffOFDM="$DIFF_2G_OFDM" 2>/dev/null || true
+    [ -n "$DIFF_2G_HT40_2S" ] && iwpriv wlan0 set_mib pwrdiffHT40_2S="$DIFF_2G_HT40_2S" 2>/dev/null || true
+    iwpriv wlan0 set_mib band=11 2>/dev/null || true
+    iwpriv wlan0 set_mib use40M=1 2>/dev/null || true
+    iwpriv wlan0 set_mib shortGI20M=1 2>/dev/null || true
+    iwpriv wlan0 set_mib shortGI40M=1 2>/dev/null || true
+    iwpriv wlan0 set_mib ampdu=1 2>/dev/null || true
+    iwpriv wlan0 set_mib regdomain="$REG_DOMAIN_2G" 2>/dev/null || true
+    logger -t set-mib "Hybrid mode: wlan0 (2.4 GHz rtl8192cd) calibrated; wlan1 (5 GHz rtw88) preserved."
 fi
 
 # Clean temporary file
