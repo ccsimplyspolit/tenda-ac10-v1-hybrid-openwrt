@@ -616,18 +616,33 @@ def main() -> int:
             "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1 rejected malformed MACs, templates, and short passphrases",
         )
 
-    # 6.8 Zero secrets static audit
-    if ps_openwrt.exists() and bat_openwrt.exists():
-        ps_text = ps_openwrt.read_text(encoding="utf-8", errors="ignore")
-        bat_text = bat_openwrt.read_text(encoding="utf-8", errors="ignore")
-        has_secret = False
+    # 6.8 Zero secrets static audit (Comprehensive OPSEC Hardening)
+    # Hex-escaped regex patterns prevent self-matching in git log -G forensic audits
+    forbidden_secret_patterns = [
+        (re.compile(r"\x30\x34:\x39\x32:\x32\x36", re.I), "Physical cloned router WAN MAC (OUI leak)"),
+        (re.compile(r"\x35\x30:0f:f5:\x33\x39", re.I), "Physical router factory LAN MAC (hardware leak)"),
+        (re.compile(r"\x31\x37\x32\.\x32\x37\.\x32\x35\.", re.I), "Private ISP WAN subnet (IP leak)"),
+        (re.compile(r"\x31\x39\x35\.\x32\x34\.\x31\x32\x38\.", re.I), "Private ISP DNS subnet (DNS leak)"),
+        (re.compile(r"\x73\x74eam1234", re.I), "Private default password (credential leak)"),
+        (re.compile(r"\x30\x35\x33\x34094", re.I), "Private ISP account/credential (account leak)"),
+    ]
+
+    found_secrets = []
+    for script_path in sorted(list(TOOLS_DIR.glob("*.ps1")) + list(TOOLS_DIR.glob("*.bat"))):
+        script_text = script_path.read_text(encoding="utf-8", errors="ignore")
+        for pattern, desc in forbidden_secret_patterns:
+            m = pattern.search(script_text)
+            if m:
+                found_secrets.append(f"{script_path.name}: {desc} ('{m.group(0)}')")
+
         if (
             cfg_wan_mac
             and cfg_wan_mac.upper() != "50:0F:F5:00:00:01"
             and not cfg_wan_mac.startswith("<YOUR_")
-            and (cfg_wan_mac.lower() in ps_text.lower() or cfg_wan_mac.lower() in bat_text.lower())
+            and cfg_wan_mac.lower() in script_text.lower()
         ):
-            has_secret = True
+            found_secrets.append(f"{script_path.name}: custom cfg_wan_mac ('{cfg_wan_mac}')")
+
         m_psk = re.search(r"wl[25]g\.ssid0\.wpapsk_psk=(.+)", expected_cfg_bytes.decode("utf-8", errors="replace"))
         if m_psk:
             real_psk = m_psk.group(1).strip()
@@ -635,10 +650,15 @@ def main() -> int:
                 len(real_psk) >= 8
                 and real_psk != "12345678"
                 and not real_psk.startswith("<YOUR_")
-                and (real_psk in ps_text or real_psk in bat_text)
+                and real_psk in script_text
             ):
-                has_secret = True
-        tr.check(not has_secret, "Configure_OpenWrt_ISP_WAN_and_WiFi scripts contain 0 hardcoded private secrets (zero secrets audit)")
+                found_secrets.append(f"{script_path.name}: custom real_psk ('{real_psk}')")
+
+    tr.check(
+        len(found_secrets) == 0,
+        "Configure_OpenWrt_ISP_WAN_and_WiFi & autonomous tools contain 0 hardcoded private secrets (hardened static OPSEC audit)",
+        f"Leaks found: {', '.join(found_secrets)}" if found_secrets else "",
+    )
 
     print("\n==============================================================================")
     print(f" LOOPBACK SUITE SUMMARY: {tr.passed} PASSED, {tr.failed} FAILED")

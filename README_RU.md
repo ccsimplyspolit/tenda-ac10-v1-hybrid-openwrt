@@ -4,7 +4,7 @@
 [![Архитектура SoC: MIPS 24KEc](https://img.shields.io/badge/SoC-Realtek%20RTL8197FS-green.svg)](docs/hardware/RTL8197FS_Architecture.md)
 [![Аппаратный NAT: 940 Мбит/с](https://img.shields.io/badge/HW_NAT-940_Мбит%2Fс-success.svg)](docs/reverse_engineering/04_RTL819X_Hardware_NAT.md)
 [![Беспроводная сеть 5 GHz: 866.7 Мбит/с](https://img.shields.io/badge/5GHz_Wi--Fi-866.7_Мбит%2Fс_(VHT80)-orange.svg)](docs/hardware/RTL8822BE_PCIe_Calibration.md)
-[![Wiki: Русская документация](https://img.shields.io/badge/Wiki-Русский%20раздел-informational.svg)](wiki/ru/Home.md)
+[![Wiki: Русская документация](https://img.shields.io/badge/Wiki-Русский%20раздел-informational.svg)](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/wiki/RU-Home)
 
 Добро пожаловать в официальный открытый репозиторий проекта комплексного исследования, оптимизации и модернизации двухдиапазонного гигабитного роутера **Tenda AC10 V1.0** (FCC ID: `V7TAC10`).
 
@@ -16,8 +16,8 @@
 
 | Раздел | Описание | Ссылка |
 |---|---|---|
-| **Русскоязычная Wiki** | Полная база знаний проекта (7 ключевых руководств + FAQ) | [wiki/ru/Home.md](wiki/ru/Home.md) |
-| **English Wiki** | Complete English documentation suite | [wiki/en/Home.md](wiki/en/Home.md) |
+| **Русскоязычная Wiki** | Полная база знаний проекта (7 ключевых руководств + FAQ) | [RU-Home (GitHub Wiki)](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/wiki/RU-Home) ([локально](wiki/RU-Home.md)) |
+| **English Wiki** | Complete English documentation suite | [EN-Home (GitHub Wiki)](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/wiki/EN-Home) ([local](wiki/EN-Home.md)) |
 | **Аппаратная архитектура** | Технические спецификации RTL8197FS, RTL8822BE, RTL8367RB, W25Q64 | [docs/hardware/](docs/hardware/) |
 | **Реверс-инжиниринг** | Разбор загрузчика Booter, ядра cr6c, драйверов rtl8192cd и HWNAT | [docs/reverse_engineering/](docs/reverse_engineering/) |
 | **Оптимизация Stock+** | Очищенный конфиг, отключение ucloud_v2, освобождение 6.8 МБ RAM | [docs/stock_plus/](docs/stock_plus/) |
@@ -145,7 +145,7 @@
 
 После завершения прошивки восстановите настройки сетевой карты скриптом `tools\autonomous_recovery\restore_network.bat` и перейдите в веб-интерфейс по адресу **`http://192.168.0.1`**.
 
-Полная пошаговая инструкция со всеми нюансами: [wiki/ru/Offline-TFTP-Recovery-Guide.md](wiki/ru/Offline-TFTP-Recovery-Guide.md).
+Полная пошаговая инструкция со всеми нюансами: [RU-Offline-TFTP-Recovery-Guide](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/wiki/RU-Offline-TFTP-Recovery-Guide) ([локально](wiki/RU-Offline-TFTP-Recovery-Guide.md)).
 
 ---
 
@@ -173,9 +173,10 @@ Tenda_AC10_V1_Public_Repo_Staging/
 │   ├── stock_plus/                     # Аудит безопасности стока и руководство по оптимизации
 │   ├── openwrt_hybrid/                 # Дерево устройств DTS, гибридная сборка и ядро 4.14
 │   └── recovery/                       # Спецификация протокола TFTP и регламент раскирпичивания
-├── wiki/                               # Исходные файлы GitHub Wiki
-│   ├── ru/                             # Полная русскоязычная Wiki (7 профильных страниц)
-│   └── en/                             # Полная англоязычная Wiki (7 matching pages)
+├── wiki/                               # Исходные файлы GitHub Wiki (плоская структура Gollum)
+│   ├── Home.md, _Sidebar.md, _Footer.md # Корневой навигационный портал
+│   ├── RU-*.md                         # Русскоязычный раздел (7 страниц)
+│   └── EN-*.md                         # Англоязычный раздел (7 страниц)
 ├── config/                             # Конфигурационные файлы и DTS
 │   ├── RouterCfm_optimized_sanitized.cfg # Готовый очищенный конфиг Stock+ (admin/admin)
 │   ├── tenda-ac10-v1.dts               # Эталонное дерево устройств для Linux 4.14

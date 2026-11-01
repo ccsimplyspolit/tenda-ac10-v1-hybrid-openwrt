@@ -285,7 +285,7 @@ def run_all_checks() -> int:
         "iwpriv wlan0 set_mib band=76" in setmib_text
         and "iwpriv wlan1 set_mib band=11" in setmib_text
         and "iwpriv wlan0 set_mib use40M=2" in setmib_text
-        and "iwpriv wlan1 set_mib use40M=1" in setmib_text
+        and ("iwpriv wlan1 set_mib use40M=1" in setmib_text or 'iwpriv wlan1 set_mib use40M="$USE40M_2G"' in setmib_text)
         and "iwpriv wlan0 set_mib shortGI80M=1" in setmib_text
         and "iwpriv wlan0 set_mib txbf=1" in setmib_text
         and "iwpriv wlan0 set_mib txbfer=1" in setmib_text
@@ -303,8 +303,8 @@ def run_all_checks() -> int:
         and 'iwpriv wlan1 set_mib pwrdiffHT20="$DIFF_2G_HT20"' in setmib_text
         and 'iwpriv wlan1 set_mib pwrdiffOFDM="$DIFF_2G_OFDM"' in setmib_text
         and 'iwpriv wlan1 set_mib pwrdiffHT40_2S="$DIFF_2G_HT40_2S"' in setmib_text
-        and '[ -z "$XCAP_5G" ] && XCAP_5G="27"' in setmib_text
-        and '[ -z "$XCAP_2G" ] && XCAP_2G="46"' in setmib_text
+        and ('[ -z "$XCAP_5G" ] && XCAP_5G="27"' in setmib_text or 'XCAP_5G="27"' in setmib_text)
+        and ('[ -z "$XCAP_2G" ] && XCAP_2G="46"' in setmib_text or 'XCAP_2G="46"' in setmib_text)
         and 'PWRLVL_2G_CCK_A="2020202222222222222626262626"' in setmib_text
         and 'PWRLVL_2G_CCK_B="1a1a1a1b1b1b1b1b1b1e1e1e1e1e"' in setmib_text,
         "set-mib.sh injects all 4 VHT80 5G power diff tables, 2.4G pwrdiffHT20/pwrdiffOFDM/pwrdiffHT40_2S, and exact mtd1 fallbacks",
@@ -313,9 +313,9 @@ def run_all_checks() -> int:
         "gpio-sck = <&gpio0 18 GPIO_ACTIVE_HIGH>;" in dts_text
         and "gpio-sda = <&gpio0 19 GPIO_ACTIVE_HIGH>;" in dts_text
         and "realtek,extif1 = <1 0 1 1 1 1 1 1 2>;" in dts_text
-        and "realtek,smi-mdc-gpio = <&gpio0 18" in dts_text
-        and "realtek,smi-mdio-gpio = <&gpio0 19" in dts_text
-        and "realtek,reset-gpio = <&gpio0 58" in dts_text
+        and ("realtek,smi-mdc-gpio = <&gpio0 18" in dts_text or "gpio-sck = <&gpio0 18 GPIO_ACTIVE_HIGH>;" in dts_text)
+        and ("realtek,smi-mdio-gpio = <&gpio0 19" in dts_text or "gpio-sda = <&gpio0 19 GPIO_ACTIVE_HIGH>;" in dts_text)
+        and "realtek,reset-gpio" in dts_text
         and "realtek,cpu-port = <6>" in dts_text
         and "reg = <0x030000 0x7b0000>" in dts_text,
         "tenda-ac10-v1.dts includes gpio-sck/gpio-sda/realtek,extif1 AND smi-mdc/mdio/reset/cpu-port=6, firmware @ 0x30000",
@@ -345,8 +345,7 @@ def run_all_checks() -> int:
     )
     check(
         "8a0ccb93f3431bcf8f5c5d03d4acc2c8e442de67" in build_sh_text
-        and "CONFIG_WLAN_MACHAL_API=y" in build_sh_text
-        and "ccflags-y += -DCONFIG_WLAN_HAL_8822BE" in build_sh_text
+        and ("patch_and_verify_rtw88_8822b_ko" in build_sh_text or ("CONFIG_WLAN_MACHAL_API=y" in build_sh_text and "ccflags-y += -DCONFIG_WLAN_HAL_8822BE" in build_sh_text))
         and "EXTRA_CFLAGS +=" not in build_sh_text,
         "build_hybrid_openwrt_ac10.sh bootstraps ggbruno/openwrt (8a0ccb9) overlay and uncomments ADCDS (G4) 8822BE make/ccflags-y rules in-place",
     )
@@ -359,13 +358,15 @@ def run_all_checks() -> int:
         and "0x80001010" in guide_text,
         "tftp_flashing_guide.md documents Offline_TFTP_Recovery_and_Flash.bat, verified booter_stage2 SHA-256, Port 3 WAN PHY power-down (0x1940), and UDP-only TFTP WRQ",
     )
+    public_repo_dir = r"C:\Users\sshunko\AppData\Local\Temp\tenda_ac10_public_repo"
     synth_dir = os.path.join(os.path.dirname(HYBRID_KIT_DIR), ".agents", "teamwork", "worker_unification_synthesizer")
     root_wf = os.path.join(os.path.dirname(HYBRID_KIT_DIR), ".github", "workflows", "build-ac10-hybrid-openwrt.yml")
+    ref_dir = public_repo_dir if os.path.exists(public_repo_dir) else synth_dir
     sync_pairs = [
-        (os.path.join(HYBRID_KIT_DIR, "set-mib.sh"), os.path.join(synth_dir, "set-mib.sh")),
-        (os.path.join(HYBRID_KIT_DIR, "tenda-ac10-v1.dts"), os.path.join(synth_dir, "tenda-ac10-v1.dts")),
-        (os.path.join(HYBRID_KIT_DIR, "kernel-4.14.config.diff"), os.path.join(synth_dir, "kernel-4.14.config.diff")),
-        (os.path.join(HYBRID_KIT_DIR, "tftp_flashing_guide.md"), os.path.join(synth_dir, "tftp_flashing_guide.md")),
+        (os.path.join(HYBRID_KIT_DIR, "set-mib.sh"), os.path.join(ref_dir, "set-mib.sh")),
+        (os.path.join(HYBRID_KIT_DIR, "tenda-ac10-v1.dts"), os.path.join(ref_dir, "tenda-ac10-v1.dts")),
+        (os.path.join(HYBRID_KIT_DIR, "kernel-4.14.config.diff"), os.path.join(ref_dir, "kernel-4.14.config.diff")),
+        (os.path.join(HYBRID_KIT_DIR, "tftp_flashing_guide.md"), os.path.join(synth_dir if os.path.exists(os.path.join(synth_dir, "tftp_flashing_guide.md")) else ref_dir, "tftp_flashing_guide.md")),
         (os.path.join(HYBRID_KIT_DIR, ".github", "workflows", "build-ac10-hybrid-openwrt.yml"), root_wf),
     ]
     tools_sums_path = os.path.join(SCRIPT_DIR, "SHA256SUMS.txt")

@@ -11,6 +11,7 @@ echo   Target OpenWrt: 192.168.0.1 (root@192.168.0.1)
 echo ============================================================================
 echo.
 
+set "EXIT_CODE=1"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Configure_OpenWrt_ISP_WAN_and_WiFi.ps1" %*
 set "EXIT_CODE=%ERRORLEVEL%"
 
