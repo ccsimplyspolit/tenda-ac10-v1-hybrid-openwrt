@@ -53,7 +53,7 @@ EOF
     # 2. Download verified ADCDS Linux 4.14.187 base image
     BASE_BIN="$STAGE_DIR/dir842_v141_factory.bin"
     wget -q -O "$BASE_BIN" \
-        "https://github.com/ADCDS/openwrt-dlink-dir842-r1/releases/download/v1.4.1/openwrt-19.07-realtek-rtl8197f-dlink_dir-842-r1-v1.4.1-factory.bin"
+        "https://github.com/ADCDS/openwrt-dlink-dir842-r1/releases/download/v1.4.1/openwrt-realtek-rtl8197f-GWR1200AC-V1-squashfs-factory.bin"
 
     # 3. Extract SquashFS rootfs & patch vmlinux + loader stub
     python3 - "$BASE_BIN" "$STAGE_DIR" << 'PYEOF'
