@@ -10,8 +10,8 @@
 
 | 🇷🇺 Русскоязычный раздел (RU) | 🇬🇧 English Documentation Section (EN) |
 | :--- | :--- |
-| **[Перейти к полному разделу на русском языке (ru/Home.md)](ru/Home.md)** | **[Go to Full English Documentation Section (en/Home.md)](en/Home.md)** |
-| Прямая ссылка: `[[ru/Home]]` | Direct link: `[[en/Home]]` |
+| **[Перейти к полному разделу на русском языке](RU-Home)** | **[Go to Full English Documentation Section](EN-Home)** |
+| Прямая ссылка: [RU-Home](RU-Home) | Direct link: [EN-Home](EN-Home) |
 
 ---
 
@@ -19,12 +19,12 @@
 
 | Тема / Topic | 🇷🇺 Документация (RU) | 🇬🇧 Documentation (EN) | Описание / Description |
 | :--- | :--- | :--- | :--- |
-| **Аппаратная архитектура** | **[Аппаратная архитектура](ru/Hardware-Architecture.md)** | **[Hardware Architecture](en/Hardware-Architecture.md)** | Архитектура RTL8197FS, 64 МБ SiP, 8 МБ Flash, RTL8822BE, RTL8367RB, GPIO |
-| **Реверс-инжиниринг** | **[Бинарный реверс-инжиниринг](ru/Binary-Reverse-Engineering.md)** | **[Binary Reverse Engineering](en/Binary-Reverse-Engineering.md)** | Дизассемблирование Booter v3.4.11B.9, ядро `cr6c`, HWNAT ASIC TLU, Unicorn 2.1.4 |
-| **Оптимизация Stock+** | **[Оптимизация Stock+](ru/Stock-Plus-Optimization.md)** | **[Stock+ Optimization](en/Stock-Plus-Optimization.md)** | Очистка стока от телеметрии `/bin/ucloud_v2`, патч uTP/торрентов, шаблон CFG |
-| **Порт Hybrid OpenWrt 4.14** | **[Порт Hybrid OpenWrt 4.14](ru/Hybrid-OpenWrt-4.14-Port.md)** | **[Hybrid OpenWrt 4.14 Port](en/Hybrid-OpenWrt-4.14-Port.md)** | Ядро Linux 4.14 LTS, дерево DTS, инжектор калибровок `set-mib.sh`, LuCI |
-| **TFTP-восстановление** | **[TFTP-восстановление](ru/Offline-TFTP-Recovery-Guide.md)** | **[Offline TFTP Recovery Guide](en/Offline-TFTP-Recovery-Guide.md)** | Раскирпичивание в 1 клик, метод удержания RST 15 секунд, автономный Python-сервер |
-| **Частые вопросы (FAQ)** | **[Частые вопросы (FAQ)](ru/FAQ-and-Troubleshooting.md)** | **[FAQ & Troubleshooting](en/FAQ-and-Troubleshooting.md)** | Разбор ошибок Web UI, несовместимость с AC10 V3.0 (eCos), выбор канала 5 GHz |
+| **Аппаратная архитектура** | [Аппаратная архитектура](RU-Hardware-Architecture) | [Hardware Architecture](EN-Hardware-Architecture) | Архитектура RTL8197FS, 64 МБ SiP, 8 МБ Flash, RTL8822BE, RTL8367RB, GPIO |
+| **Реверс-инжиниринг** | [Бинарный реверс-инжиниринг](RU-Binary-Reverse-Engineering) | [Binary Reverse Engineering](EN-Binary-Reverse-Engineering) | Дизассемблирование Booter v3.4.11B.9, ядро `cr6c`, HWNAT ASIC TLU, Unicorn 2.1.4 |
+| **Оптимизация Stock+** | [Оптимизация Stock+](RU-Stock-Plus-Optimization) | [Stock+ Optimization](EN-Stock-Plus-Optimization) | Очистка стока от телеметрии `/bin/ucloud_v2`, патч uTP/торрентов, шаблон CFG |
+| **Порт Hybrid OpenWrt 4.14** | [Порт Hybrid OpenWrt 4.14](RU-Hybrid-OpenWrt-4.14-Port) | [Hybrid OpenWrt 4.14 Port](EN-Hybrid-OpenWrt-4.14-Port) | Ядро Linux 4.14 LTS, дерево DTS, инжектор калибровок `set-mib.sh`, LuCI |
+| **TFTP-восстановление** | [TFTP-восстановление](RU-Offline-TFTP-Recovery-Guide) | [Offline TFTP Recovery Guide](EN-Offline-TFTP-Recovery-Guide) | Раскирпичивание в 1 клик, метод удержания RST 15 секунд, автономный Python-сервер |
+| **Частые вопросы (FAQ)** | [Частые вопросы (FAQ)](RU-FAQ-and-Troubleshooting) | [FAQ & Troubleshooting](EN-FAQ-and-Troubleshooting) | Разбор ошибок Web UI, несовместимость с AC10 V3.0 (eCos), выбор канала 5 GHz |
 
 ---
 

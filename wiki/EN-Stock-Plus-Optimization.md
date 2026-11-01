@@ -1,5 +1,7 @@
 # Stock+ Firmware Optimization Guide
 
+> **Section:** [Home (EN)](EN-Home) | [Russian Version](RU-Stock-Plus-Optimization) | [Wiki Portal](Home)
+
 The **Stock+ Track** provides a hardened, high-performance optimization path for users who prefer to retain the official factory vendor firmware (Linux 3.10.90) on their Tenda AC10 V1.0 while eliminating background telemetry, patching security holes, quadrupling connection capacity, and fixing known Wi-Fi driver lockups under heavy BitTorrent/uTP load.
 
 ---
@@ -43,7 +45,7 @@ When an Internet connection drops or during high WAN packet loss, the `/bin/sntp
 By default, the factory firmware instantiates an unconfigured third bridge interface (`br2`) bound to internal VLAN 3. Even when IPTV services are disabled in the Web UI, `br2` remains active in the Linux networking stack, fragmenting the network buffer pool and generating spurious packet inspection passes in the Netfilter pipeline. Stock+ purges `br2` completely.
 
 ### 2.4 Unauthenticated Administrative Endpoints
-As detailed in our [Binary Reverse Engineering](Binary-Reverse-Engineering) dossier:
+As detailed in our [Binary Reverse Engineering](EN-Binary-Reverse-Engineering) dossier:
 - **`/cgi-bin/DownloadFlash`**: Allows any LAN user to download the entire 8 MB SPI Flash (including administrative passwords and ISP PPPoE credentials in plaintext).
 - **`/goform/telnet`**: Activates a root telnet shell with hardcoded vendor credentials (`root:Fireitup`).
 - **Stock+ Hardening**: In Stock+, the administrative interface is bound to a single local management IP, and all default credentials are explicitly re-initialized to prevent unauthorized lateral exploitation.
@@ -91,7 +93,7 @@ In Stock+, these parameters are embedded permanently into the NVRAM configuratio
 The Tenda AC10 V1.0 stores its active configuration in two alternating 64 KB SPI Flash sectors: `mtd5` (`0x007E0000`, CFM Primary) and `mtd6` (`0x007F0000`, CFM Backup). Each block is protected by a 4-byte CRC32 header and serializes settings using Type-Length-Value (TLV) records.
 
 ### 4.1 Key Parameters Applied in Stock+
-The supplied [`config/RouterCfm_optimized_sanitized.cfg`](../../config/RouterCfm_optimized_sanitized.cfg) embeds the following verified optimizations:
+The supplied [`config/RouterCfm_optimized_sanitized.cfg`](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/blob/main/config/RouterCfm_optimized_sanitized.cfg) embeds the following verified optimizations:
 
 | Parameter Key | Default Value | Stock+ Value | Operational Purpose & Benefit |
 |---|---|---|---|
@@ -133,7 +135,7 @@ Deploying Stock+ takes less than 3 minutes and requires no technical tools beyon
 
 ### Step 3: Upload the Sanitized Configuration
 1. Under the same **Backup/Restore** menu, locate the **Restore Configuration** section.
-2. Click **Browse** and select [`config/RouterCfm_optimized_sanitized.cfg`](../../config/RouterCfm_optimized_sanitized.cfg) from this repository.
+2. Click **Browse** and select [`config/RouterCfm_optimized_sanitized.cfg`](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/blob/main/config/RouterCfm_optimized_sanitized.cfg) from this repository.
 3. Click **Restore**.
 4. The router will validate the configuration CRC32 and reboot automatically. The reboot process takes approximately 60 seconds.
 

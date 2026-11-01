@@ -1,5 +1,7 @@
 # Hybrid OpenWrt 4.14 Port Architecture & Deployment
 
+> **Section:** [Home (EN)](EN-Home) | [Russian Version](RU-Hybrid-OpenWrt-4.14-Port) | [Wiki Portal](Home)
+
 The **Hybrid OpenWrt 4.14 Port** provides an enterprise-grade, modern operating system for the **Tenda AC10 V1.0**. It combines a modernized **Linux Kernel 4.14 (MIPS32 Little-Endian)** and the **OpenWrt 19.07 userland** with Realtek's proprietary ASIC Hardware NAT acceleration (`rtl819x_hwnat`) and monolithic wireless HAL (`rtl8192cd`).
 
 ---
@@ -243,7 +245,7 @@ Migrating to Hybrid OpenWrt 4.14 completely eliminates the security defects of f
 
 ## 6. Step-by-Step Installation & Upgrade Guide
 
-Two binary images are provided in the [Releases](../../releases) area:
+Two binary images are provided in the [Releases](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases) area:
 - `tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin`: For direct installation from the stock vendor Web UI.
 - `tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin`: For clean installation via emergency TFTP recovery mode.
 

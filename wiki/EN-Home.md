@@ -1,5 +1,7 @@
 # Welcome to the Tenda AC10 V1.0 Engineering Wiki
 
+> **Navigation:** [Wiki Portal](Home) | [Русскоязычный раздел (RU)](RU-Home)
+
 The **Tenda AC10 V1.0** (FCC ID: `V7TAC10`, Model: `AC10`, Hardware Revision: `V1.0`) is a dual-band AC1200 gigabit Wi-Fi router based on the **Realtek RTL8197FS-VE5** System-on-Chip (SoC). While marketed as an entry-level consumer router, the underlying silicon combines a high-frequency MIPS core with advanced ASIC-level network acceleration and high-throughput 802.11ac Wave 2 wireless capabilities.
 
 This technical wiki serves as the comprehensive, silicon-level reverse-engineering dossier and operating manual for the Tenda AC10 V1.0. It brings together years of community research from [4PDA Topic 885989](https://4pda.to/forum/index.php?showtopic=885989), independent binary deconstruction, and embedded systems engineering to provide complete transparency, recovery mechanisms, and two distinct production firmware solutions.
@@ -99,18 +101,18 @@ This project provides two distinct, fully validated tracks to meet different use
 
 Explore the comprehensive sections of this wiki:
 
-1. **[Hardware Architecture](Hardware-Architecture)**: Comprehensive analysis of the RTL8197FS silicon, MIPS memory map, RTL8822BE PCIe calibration, RTL8367RB SMI switch protocol, and Winbond 8 MB SPI NOR flash partitioning.
-2. **[Binary Reverse Engineering](Binary-Reverse-Engineering)**: Step-by-step disassembly of Realtek Booter v3.4.11B.9, the 16-byte `cr6c` kernel container, `rtl8192cd` MIB table structures, the HWNAT ASIC TLU engine, and Unicorn 2.1.4 firmware validation proofs.
-3. **[Stock+ Optimization Guide](Stock-Plus-Optimization)**: Detailed forensic audit of vendor firmware vulnerabilities, memory bloat deconstruction, the uTP/torrent stability fix, and deployment of `RouterCfm_optimized_sanitized.cfg`.
-4. **[Hybrid OpenWrt 4.14 Port](Hybrid-OpenWrt-4.14-Port)**: Target architecture, verified Device Tree Source (`tenda-ac10-v1.dts`), monolithic wireless driver integration, dynamic calibration injection (`set-mib.sh`), and `CVE-2026-11405` mitigation.
-5. **[Offline TFTP Recovery Guide](Offline-TFTP-Recovery-Guide)**: Emergency unbricking playbook, analysis of bootloader network invariants (ICMP drop, WAN port isolation), and execution guide for the autonomous Python recovery suite.
-6. **[FAQ & Troubleshooting](FAQ-and-Troubleshooting)**: In-depth answers to common 4PDA community questions, AC10 V3.0 (eCos RTOS) incompatibility, Cudy WR1500 notes, Web UI upgrade error codes, and optimal 5 GHz channel configurations.
+1. **[Hardware Architecture](EN-Hardware-Architecture)**: Comprehensive analysis of the RTL8197FS silicon, MIPS memory map, RTL8822BE PCIe calibration, RTL8367RB SMI switch protocol, and Winbond 8 MB SPI NOR flash partitioning.
+2. **[Binary Reverse Engineering](EN-Binary-Reverse-Engineering)**: Step-by-step disassembly of Realtek Booter v3.4.11B.9, the 16-byte `cr6c` kernel container, `rtl8192cd` MIB table structures, the HWNAT ASIC TLU engine, and Unicorn 2.1.4 firmware validation proofs.
+3. **[Stock+ Optimization Guide](EN-Stock-Plus-Optimization)**: Detailed forensic audit of vendor firmware vulnerabilities, memory bloat deconstruction, the uTP/torrent stability fix, and deployment of `RouterCfm_optimized_sanitized.cfg`.
+4. **[Hybrid OpenWrt 4.14 Port](EN-Hybrid-OpenWrt-4.14-Port)**: Target architecture, verified Device Tree Source (`tenda-ac10-v1.dts`), monolithic wireless driver integration, dynamic calibration injection (`set-mib.sh`), and `CVE-2026-11405` mitigation.
+5. **[Offline TFTP Recovery Guide](EN-Offline-TFTP-Recovery-Guide)**: Emergency unbricking playbook, analysis of bootloader network invariants (ICMP drop, WAN port isolation), and execution guide for the autonomous Python recovery suite.
+6. **[FAQ & Troubleshooting](EN-FAQ-and-Troubleshooting)**: In-depth answers to common 4PDA community questions, AC10 V3.0 (eCos RTOS) incompatibility, Cudy WR1500 notes, Web UI upgrade error codes, and optimal 5 GHz channel configurations.
 
 ---
 
 ## Quick Start Summary
 
-- **To deploy Stock+**: Upload [`config/RouterCfm_optimized_sanitized.cfg`](../../config/RouterCfm_optimized_sanitized.cfg) via the vendor Web UI under **Administration** -> **Backup/Restore**. Default credentials become `admin`/`admin`.
+- **To deploy Stock+**: Upload [`config/RouterCfm_optimized_sanitized.cfg`](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/blob/main/config/RouterCfm_optimized_sanitized.cfg) via the vendor Web UI under **Administration** -> **Backup/Restore**. Default credentials become `admin`/`admin`.
 - **To deploy Hybrid OpenWrt 4.14 via Web UI**: Flash `tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin` via **Administration** -> **Firmware Upgrade**.
 - **To recover from a brick**: Connect your PC to **LAN Port 1**, run `tools/autonomous_recovery/run_emergency_recovery.bat`, and power on the router while holding **RST/WPS for 15 seconds**.
 

@@ -1,5 +1,7 @@
 # Frequently Asked Questions (FAQ) & Troubleshooting
 
+> **Section:** [Home (EN)](EN-Home) | [Russian Version](RU-FAQ-and-Troubleshooting) | [Wiki Portal](Home)
+
 This document addresses the most frequent community inquiries, common misconceptions from [4PDA Topic 885989](https://4pda.to/forum/index.php?showtopic=885989), hardware compatibility boundaries, and step-by-step diagnostic procedures for the **Tenda AC10 V1.0**.
 
 ---

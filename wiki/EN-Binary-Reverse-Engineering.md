@@ -1,5 +1,7 @@
 # Binary Reverse Engineering & Forensic Silicon Proofs
 
+> **Section:** [Home (EN)](EN-Home) | [Russian Version](RU-Binary-Reverse-Engineering) | [Wiki Portal](Home)
+
 This document presents the low-level reverse-engineering findings, assembly disassembly, and formal cryptographic/emulation proofs produced during the analysis of the **Tenda AC10 V1.0** firmware stack and Realtek RTL8197FS silicon.
 
 ---

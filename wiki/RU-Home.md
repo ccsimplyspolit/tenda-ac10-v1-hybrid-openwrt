@@ -1,5 +1,7 @@
 # База знаний Tenda AC10 V1.0 (Русскоязычный раздел)
 
+> **Навигация:** [Главная Wiki](Home) | [English Documentation](EN-Home)
+
 Добро пожаловать в официальную документацию и базу знаний открытого проекта исследования, реверс-инжиниринга и модернизации двухдиапазонного гигабитного маршрутизатора **Tenda AC10 V1.0** (FCC ID: `V7TAC10`).
 
 Данный ресурс аккумулирует опыт инженеров, результаты побитового анализа бинарных слоев прошивки, аппаратных замеров и многолетних наработок сообщества форума **4PDA** (ветка [Tenda AC10 – Обсуждение](https://4pda.to/forum/index.php?showtopic=885989)).
@@ -20,14 +22,14 @@
                                          └── Порт Hybrid OpenWrt 4.14
 ```
 
-1. **[Аппаратная архитектура (Hardware Architecture)](Hardware-Architecture.md)**
+1. **[Аппаратная архитектура (Hardware Architecture)](RU-Hardware-Architecture)**
    - Детальный разбор кремния: SoC Realtek RTL8197FS-VE5 (1.0 GHz MIPS 24KEc, 64 МБ DDR2 SDRAM SiP).
    - Радиомодуль 5 GHz Realtek RTL8822BE (PCIe 1.1 x1, 866.7 Мбит/с VHT80, чистый eFuse `0xFF`, Skyworth RFE 6).
    - Гигабитный свитч Realtek RTL8367RB-VB (SMI GPIO 18/19, сброс RST GPIO 58, шина RGMII Port 6).
    - Полная таблица назначений GPIO (светодиоды, кнопки, аппаратный сброс свитча, мультиплексирование SPI/JTAG).
    - Карта разделов SPI NOR Flash (Winbond W25Q64FV 8 МБ) и схема распределения MAC-адресов в `mtd1`.
 
-2. **[Бинарный реверс-инжиниринг (Binary Reverse Engineering)](Binary-Reverse-Engineering.md)**
+2. **[Бинарный реверс-инжиниринг (Binary Reverse Engineering)](RU-Binary-Reverse-Engineering)**
    - Дизассемблирование загрузчика Realtek Booter v3.4.11B.9 (`0x80000000`, стек `0x80700000`).
    - Баг сброса ICMP в загрузчике (`0x80001010`): почему роутер в аварийном режиме никогда не отвечает на ping.
    - Аппаратное обесточивание порта WAN (`0x8000ECE8`–`0x8000ED4C`): физическая изоляция порта 3.
@@ -37,25 +39,25 @@
    - Unicorn 2.1.4 Proof: анализ функции `check_fw_valid` в `libcommon.so` и требование ID `0x00030028`.
    - Точный анализ уязвимости CVE-2026-11405 и скрытых интерфейсов стока (`/cgi-bin/DownloadFlash`, `/goform/telnet`, `root:Fireitup`).
 
-3. **[Оптимизация заводской прошивки (Stock+ Optimization)](Stock-Plus-Optimization.md)**
+3. **[Оптимизация заводской прошивки (Stock+ Optimization)](RU-Stock-Plus-Optimization)**
    - Анализ заводского стока: 38 МБ занятой памяти при старте, фоновый демон телеметрии `/bin/ucloud_v2` (4.58 МБ RAM), призрачный мост `br2` (`vlan3`).
    - Руководство по применению `RouterCfm_optimized_sanitized.cfg`: высвобождение 6.8 МБ оперативной памяти, отключение шпионских сокетов, стабилизация NTP.
    - Устранение проблемы отвалов Wi-Fi при высокой нагрузке uTP/торрентов через параметры `manual_edca=1` и `disable_txsc=1`.
 
-4. **[Порт Hybrid OpenWrt 4.14 (Hybrid OpenWrt Port)](Hybrid-OpenWrt-4.14-Port.md)**
+4. **[Порт Hybrid OpenWrt 4.14 (Hybrid OpenWrt Port)](RU-Hybrid-OpenWrt-4.14-Port)**
    - Архитектура гибридного стека: ядро Linux 4.14.221 + проприетарный монолитный драйвер `rtl8192cd` + аппаратный NAT `rtl819x_hwnat.ko`.
    - Автоматическая инъекция калибровок через `set-mib.sh` по маркеру `HW_NIC0_ADDR=` в разделе `mtd1`.
    - Эталонное дерево устройств `tenda-ac10-v1.dts`: сброс свитча `<&gpio1 26 GPIO_ACTIVE_LOW>`, задержки RGMII.
    - Устранение уязвимостей заводского сервера `R7WebsSecurityHandler` переходом на `uhttpd` + `rpcd`.
    - Фиксация стандартного LAN IP `192.168.0.1` (устранение ошибки ранних любительских сборок с `192.168.1.12`).
 
-5. **[Аварийное TFTP-восстановление (Offline TFTP Recovery Guide)](Offline-TFTP-Recovery-Guide.md)**
+5. **[Аварийное TFTP-восстановление (Offline TFTP Recovery Guide)](RU-Offline-TFTP-Recovery-Guide)**
    - Гарантированный регламент «раскирпичивания» без разборки корпуса и пайки.
    - Аппаратная защита Booter: почему секторы `0x000000 - 0x00020000` невозможно повредить софтверно.
    - Пошаговый сценарий: подключение к LAN 1 (порт WAN обесточен!), статический IP `192.168.1.100`, удержание кнопки RST/WPS 15 секунд при подаче питания.
    - Использование автономного скрипта `tools/autonomous_recovery/run_emergency_recovery.bat` и ручная прошивка через Tftpd32 / Linux `tftp`.
 
-6. **[Частые вопросы и решение проблем (FAQ and Troubleshooting)](FAQ-and-Troubleshooting.md)**
+6. **[Частые вопросы и решение проблем (FAQ and Troubleshooting)](RU-FAQ-and-Troubleshooting)**
    - Разбор ошибки «Format error!» при обновлении через веб-интерфейс.
    - Категорическая несовместимость с Tenda AC10 V3.0 (2 МБ eCos RTOS) и Cudy WR1500 (RTL8197H, RTL8832BR Wi-Fi 6).
    - Опровержение ошибки в шапке 4PDA: у AC10 V1.0 физически 8 МБ Flash / 64 МБ RAM SiP.
@@ -93,4 +95,4 @@
 
 - Исходный код и инструментарий: [ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt)
 - Ветка обсуждения на 4PDA: [Tenda AC10 – Обсуждение](https://4pda.to/forum/index.php?showtopic=885989)
-- Англоязычный раздел Wiki: [English Wiki Home](../en/Home.md)
+- Англоязычный раздел Wiki: [English Wiki Home](EN-Home)

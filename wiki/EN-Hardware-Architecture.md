@@ -1,5 +1,7 @@
 # Tenda AC10 V1.0 Hardware Architecture & Silicon Dossier
 
+> **Section:** [Home (EN)](EN-Home) | [Russian Version](RU-Hardware-Architecture) | [Wiki Portal](Home)
+
 This document provides a comprehensive hardware architecture specification and silicon-level teardown of the **Tenda AC10 V1.0** (FCC ID: `V7TAC10`). It details the System-on-Chip (SoC) microarchitecture, memory map, peripheral interconnects, wireless radio calibration pipelines, switch management interfaces, and SPI NOR flash layout.
 
 ---

@@ -1,5 +1,7 @@
 # Offline TFTP Disaster Recovery Guide & Playbook
 
+> **Section:** [Home (EN)](EN-Home) | [Russian Version](RU-Offline-TFTP-Recovery-Guide) | [Wiki Portal](Home)
+
 This guide provides the complete, authoritative disaster recovery protocol for the **Tenda AC10 V1.0**. By utilizing the embedded emergency TFTP server built into the **Realtek Booter (v3.4.11B.9)**, any bricked, boot-looping, or misconfigured router can be fully restored to factory stock or upgraded to Hybrid OpenWrt 4.14 in under 3 minutes over standard ethernet—**without requiring serial UART soldering or JTAG hardware adapters**.
 
 ---
