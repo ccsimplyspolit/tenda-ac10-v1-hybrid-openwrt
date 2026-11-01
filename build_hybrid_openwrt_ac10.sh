@@ -368,6 +368,11 @@ s = s.replace(
 open(p_leds, "w", encoding="utf-8").write(s)
 
 # 3. /etc/board.d/02_network: read HW_NIC0_ADDR from /dev/mtd1 (neutral OUI fallback 50:0f:f5:00:00:00)
+#    Use base+2 for WAN (eth0.1) because Tenda AC10 V1.0 mtd1 assigns:
+#      HW_NIC0_ADDR       = base+0 (LAN br-lan / eth0.2)
+#      HW_WLAN1_WLAN_ADDR = base+1 (2.4 GHz wlan0)
+#      WAN eth0.1         = base+2 (distinct from LAN, 2.4G, and 5G!)
+#      HW_WLAN0_WLAN_ADDR = base+5 (5 GHz wlan1)
 p_net = os.path.join(root, "etc/board.d/02_network")
 s = open(p_net, "r", encoding="utf-8").read()
 ac10_net_case = """  tenda,ac10-v1)
@@ -376,7 +381,7 @@ ac10_net_case = """  tenda,ac10-v1)
       [0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;;
       *) lan_mac="50:0f:f5:00:00:00" ;;
     esac
-    wan_mac=$(macaddr_add "$lan_mac" 1)
+    wan_mac=$(macaddr_add "$lan_mac" 2)
     ;;
   gwr1200ac-v1)"""
 assert "  gwr1200ac-v1)" in s
@@ -393,8 +398,8 @@ s = s.replace(
 open(p_asic, "w", encoding="utf-8").write(s)
 
 # 5. /etc/uci-defaults/99-dir842-m5: Switch Port 3 = WAN (vlan 1), Ports 0,1,2 = LAN (vlan 2),
-#    Tenda SSID/MAC (neutral fallback 50:0f:f5:00:00:05), fail-safe HT20 default on channel 36
-#    (VHT40/VHT80 selectable in LuCI now that RFE Type 6 0x83C=0x9194B2B9 + type5 tables are patched).
+#    Tenda SSID/MAC (neutral fallback 50:0f:f5:00:00:05), bind radio0 by PCIe path (immune to phy0->phy1),
+#    fail-safe HT20 default on channel 36 (VHT40/VHT80 selectable in LuCI).
 p_m5 = os.path.join(root, "etc/uci-defaults/99-dir842-m5")
 s = open(p_m5, "r", encoding="utf-8").read()
 assert "set network.@switch_vlan[-1].ports='4 6t'" in s
@@ -407,8 +412,27 @@ s = s.replace(
     "DIR842_WIFI_MAC=$(dd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr '\\0' '\\n' | tr -d '\\r' | grep '^HW_WLAN0_WLAN_ADDR=' | head -n1 | cut -d= -f2 | sed 's/../&:/g;s/:$//' | tr 'A-F' 'a-f')\n\tcase \"$DIR842_WIFI_MAC\" in [0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;; *) DIR842_WIFI_MAC='50:0f:f5:00:00:05' ;; esac ;;",
 )
 s = s.replace(
+    "set wireless.default_radio0.macaddr=\"$DIR842_WIFI_MAC\"",
+    "set wireless.default_radio0.macaddr=\"$DIR842_WIFI_MAC\"\nset wireless.default_radio0.ifname='wlan1'",
+)
+phy_bind_snippet = """_ac10_phy=$(ls /sys/bus/pci/drivers/rtw_8822be/*/ieee80211 2>/dev/null | head -n1)
+[ -z "$_ac10_phy" ] && _ac10_phy=$(ls /sys/class/ieee80211 2>/dev/null | head -n1)
+if [ -n "$_ac10_phy" ]; then
+\t_ac10_path=$(. /lib/netifd/mac80211.sh 2>/dev/null; mac80211_phy_to_path "$_ac10_phy" 2>/dev/null)
+\tif [ -n "$_ac10_path" ]; then
+\t\tuci -q set wireless.radio0.path="$_ac10_path"
+\t\tuci -q delete wireless.radio0.phy
+\telse
+\t\tuci -q set wireless.radio0.phy="$_ac10_phy"
+\tfi
+\tuci -q delete wireless.radio0.macaddr
+\tuci -q commit wireless
+fi
+uci -q set system.@system[0].hostname='Tenda-AC10-V1'
+uci -q set system.@system[0].dir842_m5_seeded='1'"""
+s = s.replace(
     "uci -q set system.@system[0].dir842_m5_seeded='1'",
-    "uci -q set system.@system[0].hostname='Tenda-AC10-V1'\nuci -q set system.@system[0].dir842_m5_seeded='1'",
+    phy_bind_snippet,
 )
 open(p_m5, "w", encoding="utf-8").write(s)
 
@@ -437,15 +461,17 @@ assert "do_mount_root() {\n\tmount_root" in s_mr
 s_mr = s_mr.replace("do_mount_root() {\n\tmount_root", rfd_guard, 1)
 open(p_mr, "w", encoding="utf-8").write(s_mr)
 
-# 6. /etc/uci-defaults/09_wireless-dualband-dir842: 2.4G SSID = Tenda-AC10-2G, keep urban interference-safe HT20 default
+# 6. /etc/uci-defaults/09_wireless-dualband-dir842: 2.4G SSID = Tenda-AC10-2G, keep urban interference-safe HT20 default,
+#    and drop D-Link's hardcoded country='1' so rtl8192cd.sh inherits factory HW_WLAN1_REG_DOMAIN from /dev/mtd1.
 p_w2 = os.path.join(root, "etc/uci-defaults/09_wireless-dualband-dir842")
 s = open(p_w2, "r", encoding="utf-8").read()
 s = s.replace("set wireless.default_radio1.ssid='DIR842-2G'", "set wireless.default_radio1.ssid='Tenda-AC10-2G'")
+s = s.replace("set wireless.radio1.country='1'\n", "")
 assert "set wireless.radio1.htmode='HT20'" in s
 open(p_w2, "w", encoding="utf-8").write(s)
 
-# 7. /lib/netifd/wireless/rtl8192cd.sh: inject Tenda AC10 V1.0 2.4G RF calibration (RFE Type 5, XCAP, THER, TX power tables, MAC)
-#    + vladisslav0 4PDA #97815216 & #98016337 UDP/uTP fixes (manual_edca=1, disable_txsc=1, coexist=0 on noscan=1)
+# 7. /lib/netifd/wireless/rtl8192cd.sh: inject Tenda AC10 V1.0 2.4G RF calibration (RFE Type 5, XCAP, THER, TX power tables,
+#    HW_WLAN1_REG_DOMAIN, HW_WLAN1_WLAN_ADDR MAC) + vladisslav0 4PDA #97815216 & #98016337 UDP/uTP fixes
 p_drv = os.path.join(root, "lib/netifd/wireless/rtl8192cd.sh")
 s = open(p_drv, "r", encoding="utf-8").read()
 assert "json_get_vars channel htmode country band phy macaddr beacon_int dtim_period led_type" in s
@@ -465,6 +491,8 @@ cal_snippet = """\t\techo "${phy_ifname}_phyBandSelect=1"
 \t\tdd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr '\\0' '\\n' | tr -d '\\r' > "$_cal_tmp"
 \t\t_xcap=$(grep '^HW_WLAN1_11N_XCAP=' "$_cal_tmp" | head -n1 | cut -d= -f2); [ -z "$_xcap" ] && _xcap="46"
 \t\t_ther=$(grep '^HW_WLAN1_11N_THER=' "$_cal_tmp" | head -n1 | cut -d= -f2); [ -z "$_ther" ] && _ther="32"
+\t\t_regdom=$(grep '^HW_WLAN1_REG_DOMAIN=' "$_cal_tmp" | head -n1 | cut -d= -f2)
+\t\tcase "$_regdom" in ''|*[!0-9]*) _regdom="13" ;; esac
 \t\t_cck_a=$(grep '^HW_WLAN1_TX_POWER_CCK_A=' "$_cal_tmp" | head -n1 | cut -d= -f2); [ -z "$_cck_a" ] && _cck_a="2020202222222222222626262626"
 \t\t_cck_b=$(grep '^HW_WLAN1_TX_POWER_CCK_B=' "$_cal_tmp" | head -n1 | cut -d= -f2); [ -z "$_cck_b" ] && _cck_b="1a1a1a1b1b1b1b1b1b1e1e1e1e1e"
 \t\t_ht40_a=$(grep '^HW_WLAN1_TX_POWER_HT40_1S_A=' "$_cal_tmp" | head -n1 | cut -d= -f2); [ -z "$_ht40_a" ] && _ht40_a="1a1a1a1a1a1a1a1a1a1d1d1d1d1d"
@@ -474,7 +502,7 @@ cal_snippet = """\t\techo "${phy_ifname}_phyBandSelect=1"
 \t\t_d_ht40=$(grep '^HW_WLAN1_TX_POWER_DIFF_HT40_2S=' "$_cal_tmp" | head -n1 | cut -d= -f2); [ -z "$_d_ht40" ] && _d_ht40="0000000000000000000000000000"
 \t\t_wmac2g=$(grep '^HW_WLAN1_WLAN_ADDR=' "$_cal_tmp" | head -n1 | cut -d= -f2 | sed 's/../&:/g;s/:$//' | tr 'A-F' 'a-f')
 \t\trm -f "$_cal_tmp"
-\t\tcase "$_wmac2g" in [0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;; *) _wmac2g="50:0f:f5:00:00:02" ;; esac
+\t\tcase "$_wmac2g" in [0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;; *) _wmac2g="50:0f:f5:00:00:01" ;; esac
 \t\t[ -z "$macaddr" ] && macaddr="$_wmac2g"
 \t\techo "${phy_ifname}_xcap=$_xcap"
 \t\techo "${phy_ifname}_ther=$_ther"
@@ -493,7 +521,13 @@ cal_snippet = """\t\techo "${phy_ifname}_phyBandSelect=1"
 \t\techo "${phy_ifname}_disable_txsc=1"
 \t\t[ "$noscan" = "1" ] && echo "${phy_ifname}_coexist=0" """
 assert '\t\techo "${phy_ifname}_phyBandSelect=1"' in s
+assert '\t\t[ -n "$country" ] && echo "${phy_ifname}_regdomain=$country"' in s
 s = s.replace('\t\techo "${phy_ifname}_phyBandSelect=1"', cal_snippet, 1)
+s = s.replace(
+    '\t\t[ -n "$country" ] && echo "${phy_ifname}_regdomain=$country"',
+    '\t\techo "${phy_ifname}_regdomain=${country:-$_regdom}"',
+    1,
+)
 open(p_drv, "w", encoding="utf-8").write(s)
 
 # 8. /lib/upgrade/platform.sh: accept cs6c / cr6c on tenda,ac10-v1
@@ -582,6 +616,14 @@ PYEOF
 else
 
 # Full source build path (FULL_SOURCE_BUILD=1)
+echo "=============================================================================="
+echo "[WARNING] EXPERIMENTAL FULL_SOURCE_BUILD=1 MODE SELECTED!"
+echo "  Production builds use deterministic [FAST-HYBRID] mode (FULL_SOURCE_BUILD=0),"
+echo "  which applies verified binary vmlinux RTL8367RB port-map patches and"
+echo "  rtw88_8822b.ko Skyworth SE5003L1 RFE Type 6 ELF relocations directly to the"
+echo "  audited 4.14.187 kernel & modules. Ensure equivalent C source patches are"
+echo "  applied to your local source tree before flashing a FULL_SOURCE_BUILD image."
+echo "=============================================================================="
 if [ ! -f "./scripts/feeds" ] && [ -d "./files/target/linux/realtek" ]; then
     echo "[1.5/7] Bootstrapping ggbruno/openwrt (8a0ccb9) base tree and applying ADCDS overlay..."
     git clone https://github.com/ggbruno/openwrt.git _ggbruno_base

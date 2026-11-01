@@ -145,7 +145,7 @@ valid_mac "$ETH_MAC" || ETH_MAC="50:0f:f5:00:00:00"
 MAC_5G=$(format_mac "$MAC_5G_RAW")
 valid_mac "$MAC_5G" || MAC_5G="50:0f:f5:00:00:05"
 MAC_2G=$(format_mac "$MAC_2G_RAW")
-valid_mac "$MAC_2G" || MAC_2G="50:0f:f5:00:00:02"
+valid_mac "$MAC_2G" || MAC_2G="50:0f:f5:00:00:01"
 
 # Read UCI 2.4 GHz channel width & noscan policy (default HT20 = use40M 0)
 UCI_2G_HTMODE=$(uci -q get wireless.radio1.htmode 2>/dev/null)
@@ -242,7 +242,18 @@ else
             if [ -f /etc/modules.d/rtw88 ] && [ -w /etc/modules.d/rtw88 ]; then
                 sed -i "s|^rtw88_core.*|rtw88_core xtal_cap_override=$XCAP_5G|" /etc/modules.d/rtw88 2>/dev/null || true
             fi
-            # Re-probe rtw88_8822be at early boot (START=18, before S19network/hostapd) so efuse.crystal_cap latches $XCAP_5G
+            # Pre-bind radio0 to its invariant PCIe path before re-probing so hotplug 10-wifi-detect sees found=1 on phy1
+            _PRE_PHY=$(ls /sys/bus/pci/drivers/rtw_8822be/*/ieee80211 2>/dev/null | head -n1)
+            if [ -n "$_PRE_PHY" ] && [ -f /lib/netifd/mac80211.sh ] && command -v uci >/dev/null 2>&1 && [ "$(uci -q get wireless.radio0.type 2>/dev/null)" = "mac80211" ]; then
+                _PRE_PATH=$(. /lib/netifd/mac80211.sh; mac80211_phy_to_path "$_PRE_PHY" 2>/dev/null)
+                if [ -n "$_PRE_PATH" ]; then
+                    uci -q set wireless.radio0.path="$_PRE_PATH"
+                    uci -q delete wireless.radio0.phy
+                    uci -q delete wireless.radio0.macaddr
+                    uci -q commit wireless
+                fi
+            fi
+            # Re-probe rtw88_8822be at early boot (START=18, before S20network/hostapd) so efuse.crystal_cap latches $XCAP_5G
             if ! pidof hostapd >/dev/null 2>&1; then
                 rmmod rtw88_8822be 2>/dev/null && modprobe rtw88_8822be 2>/dev/null || true
             fi
@@ -250,22 +261,45 @@ else
         fi
     fi
 
-    # B. Ensure 5 GHz mac80211 interface & UCI carry the per-unit factory HW_WLAN0_WLAN_ADDR MAC
+    # B. Guard against phy0 -> phy1 index shift after rmmod/modprobe rtw88_8822be
+    #    and ensure 5 GHz mac80211 interface & UCI carry factory HW_WLAN0_WLAN_ADDR MAC:
+    ACTUAL_PHY=$(ls /sys/bus/pci/drivers/rtw_8822be/*/ieee80211 2>/dev/null | head -n1)
+    [ -z "$ACTUAL_PHY" ] && ACTUAL_PHY=$(ls /sys/class/ieee80211 2>/dev/null | head -n1)
     for _net in /sys/class/net/wlan*; do
         [ -e "$_net" ] || continue
         _if="${_net##*/}"
         case "$_if" in *-*) continue ;; esac
         if [ ! -e "/proc/$_if/mib_all" ]; then
             ifconfig "$_if" hw ether "$MAC_5G" 2>/dev/null || ip link set dev "$_if" address "$MAC_5G" 2>/dev/null || true
-            logger -t set-mib "5 GHz rtw88 interface $_if factory MAC set to $MAC_5G"
+            logger -t set-mib "5 GHz rtw88 interface $_if factory MAC set to $MAC_5G (phy=${ACTUAL_PHY:-unknown})"
         fi
     done
-    if command -v uci >/dev/null 2>&1 && uci -q get wireless.default_radio0 >/dev/null 2>&1; then
-        CUR_UCI_5G_MAC=$(uci -q get wireless.default_radio0.macaddr 2>/dev/null)
-        if [ -z "$CUR_UCI_5G_MAC" ] || [ "$CUR_UCI_5G_MAC" = "02:11:22:33:44:56" ]; then
-            uci -q set wireless.default_radio0.macaddr="$MAC_5G"
-            uci -q commit wireless
+    if command -v uci >/dev/null 2>&1 && [ "$(uci -q get wireless.radio0.type 2>/dev/null)" = "mac80211" ]; then
+        ACTUAL_PATH=""
+        if [ -n "$ACTUAL_PHY" ] && [ -f /lib/netifd/mac80211.sh ]; then
+            ACTUAL_PATH=$(. /lib/netifd/mac80211.sh; mac80211_phy_to_path "$ACTUAL_PHY" 2>/dev/null)
         fi
+        if [ -n "$ACTUAL_PATH" ]; then
+            uci -q set wireless.radio0.path="$ACTUAL_PATH"
+            uci -q delete wireless.radio0.phy
+        elif [ -n "$ACTUAL_PHY" ]; then
+            uci -q set wireless.radio0.phy="$ACTUAL_PHY"
+        fi
+        # Remove any stale random blank-eFuse wiphy macaddr on wifi-device so find_phy() uses PCIe path/phy
+        uci -q delete wireless.radio0.macaddr
+        # Remove any duplicate disabled radio2 created if hotplug 10-wifi-detect fired on phy1
+        if [ "$(uci -q get wireless.radio2.type 2>/dev/null)" = "mac80211" ] && [ "$(uci -q get wireless.radio2.disabled 2>/dev/null)" = "1" ]; then
+            uci -q delete wireless.default_radio2
+            uci -q delete wireless.radio2
+        fi
+        if uci -q get wireless.default_radio0 >/dev/null 2>&1; then
+            [ -z "$(uci -q get wireless.default_radio0.ifname 2>/dev/null)" ] && uci -q set wireless.default_radio0.ifname='wlan1'
+            CUR_UCI_5G_MAC=$(uci -q get wireless.default_radio0.macaddr 2>/dev/null)
+            if [ -z "$CUR_UCI_5G_MAC" ] || [ "$CUR_UCI_5G_MAC" = "02:11:22:33:44:56" ]; then
+                uci -q set wireless.default_radio0.macaddr="$MAC_5G"
+            fi
+        fi
+        uci -q commit wireless
     fi
 
     # C. Identify 2.4 GHz vendor rtl8192cd root interface by /proc/<ifname>/mib_all and inject calibration + UDP/uTP fixes
