@@ -8,7 +8,7 @@
     - Pre-flight binary safety gate: emulates Realtek Booter v3.4.11B.9 AutoBurn (0x800019d0) and check_image (0x8000dd10)
       to verify magic (cr6c/cs6c), loadAddr (0x80A00000), burnAddr (0x00030000), 16-bit BE additive checksum (0x0000),
       and blocks the lethal 2-segment cs6c+hsqs bootloader bug (0x80001c2c).
-    - Multi-layer failsafe network configuration: dynamically identifies the physical Ethernet NIC (Intel I225-V),
+    - Multi-layer failsafe network configuration: dynamically identifies the physical Ethernet NIC,
       snapshots original IPv4/DHCP/DNS state to network_state_backup.json, sets static IP 192.168.1.116/24 inside a
       strict try / finally block, and unconditionally restores DHCP + automatic DNS upon exit, error, Ctrl+C, or
       prolonged 20-30 minute internet outage.
@@ -38,8 +38,20 @@ $HybridKitRoot = Split-Path -Parent $ScriptDir
 $BackupStateFile = Join-Path $ScriptDir "network_state_backup.json"
 
 if ([string]::IsNullOrWhiteSpace($FirmwarePath)) {
-    $DefaultStockTftp = Join-Path $HybridKitRoot "backups\Tenda_AC10_V1_Stock_TFTP_Recovery.bin"
-    $FirmwarePath = $DefaultStockTftp
+    $Candidates = @(
+        (Join-Path $HybridKitRoot "01_Stock_Firmware_and_Partitions\Tenda_AC10_V1_Stock_TFTP_Recovery.bin"),
+        (Join-Path $HybridKitRoot "backups\Tenda_AC10_V1_Stock_TFTP_Recovery.bin"),
+        (Join-Path $HybridKitRoot "02_Compiled_Hybrid_OpenWrt_4.14_Firmware\tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin")
+    )
+    foreach ($c in $Candidates) {
+        if (Test-Path -LiteralPath $c) {
+            $FirmwarePath = $c
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($FirmwarePath)) {
+        $FirmwarePath = $Candidates[0]
+    }
 }
 
 function Write-Step {
@@ -65,6 +77,28 @@ using System.Net.Sockets;
 using System.Text;
 
 public static class RealtekBooterFastChecksum {
+    private static readonly uint[] CrcTable = InitCrcTable();
+    private static uint[] InitCrcTable() {
+        uint[] tbl = new uint[256];
+        for (uint i = 0; i < 256; i++) {
+            uint c = i;
+            for (int k = 0; k < 8; k++) {
+                c = ((c & 1) != 0) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+            }
+            tbl[i] = c;
+        }
+        return tbl;
+    }
+
+    public static uint Crc32(byte[] buffer, int offset, int length) {
+        uint crc = 0xFFFFFFFFu;
+        int end = offset + length;
+        for (int i = offset; i < end; i++) {
+            crc = CrcTable[(crc ^ buffer[i]) & 0xFFu] ^ (crc >> 8);
+        }
+        return ~crc;
+    }
+
     public static ushort Sum16BE(byte[] buffer, int offset, int length) {
         uint acc = 0;
         int end = offset + length;
@@ -219,9 +253,53 @@ function Test-RealtekBooterImage {
         throw "Firmware file not found: $Path"
     }
 
-    [byte[]]$raw = [System.IO.File]::ReadAllBytes($Path)
-    $totalLen = $raw.Length
+    [byte[]]$origRaw = [System.IO.File]::ReadAllBytes($Path)
+    [byte[]]$raw = $origRaw
     $maxAllowed = 8060928 # 0x7E0000 - 0x030000 = 0x7B0000 (7,872 KB)
+    $isWebWrapped = $false
+
+    if ($origRaw.Length -ge 4 -and $origRaw[0] -eq 0x27 -and $origRaw[1] -eq 0x05 -and $origRaw[2] -eq 0x19 -and $origRaw[3] -eq 0x56) {
+        if ($origRaw.Length -lt 96) {
+            throw "Tenda 0x27051956 WebUI image too small ($($origRaw.Length) bytes < 96)."
+        }
+        if ($origRaw.Length -ge $maxAllowed) {
+            throw "Tenda 0x27051956 WebUI image ($($origRaw.Length) bytes) violates check_mtd_size (< $maxAllowed bytes)!"
+        }
+        $ihHcrc = [uint32](Read-UInt32BE -Buffer $origRaw -Offset 4)
+        $ihSize = [int64](Read-UInt32BE -Buffer $origRaw -Offset 12)
+        $ihDcrc = [uint32](Read-UInt32BE -Buffer $origRaw -Offset 24)
+        $ihOs = if ($origRaw[0x20] -eq 2) { 2 } else { [int]$origRaw[28] }
+        $ver0x24 = [uint32](Read-UInt32BE -Buffer $origRaw -Offset 0x24)
+        $ver0x20 = [uint32](Read-UInt32BE -Buffer $origRaw -Offset 0x20)
+        $ihVer = if ($ver0x24 -eq 0x00030028) { $ver0x24 } else { $ver0x20 }
+
+        [byte[]]$hdrZero = New-Object byte[] 64
+        [Array]::Copy($origRaw, 0, $hdrZero, 0, 64)
+        $hdrZero[4] = 0; $hdrZero[5] = 0; $hdrZero[6] = 0; $hdrZero[7] = 0
+        $calcHcrc = [RealtekBooterFastChecksum]::Crc32($hdrZero, 0, 64)
+        if ($ihHcrc -ne 0 -and $ihHcrc -ne $calcHcrc) {
+            throw ("Tenda 0x27051956 ih_hcrc mismatch: 0x{0:X8} != 0x{1:X8}" -f $ihHcrc, $calcHcrc)
+        }
+        $innerLen = $origRaw.Length - 64
+        if ($ihSize -ne $innerLen) {
+            throw "Tenda 0x27051956 ih_size mismatch: header=$ihSize, actual=$innerLen"
+        }
+        $calcDcrc = [RealtekBooterFastChecksum]::Crc32($origRaw, 64, $innerLen)
+        if ($ihDcrc -ne $calcDcrc) {
+            throw ("Tenda 0x27051956 ih_dcrc mismatch: 0x{0:X8} != 0x{1:X8}" -f $ihDcrc, $calcDcrc)
+        }
+        if ($ihOs -ne 2) {
+            throw "Tenda 0x27051956 ih_os=$ihOs rejected (expected 2 = Linux)."
+        }
+        if ($ihVer -ne 0x00030028) {
+            throw ("Tenda 0x27051956 ih_ver=0x{0:X8} rejected (expected 0x00030028 for Tenda AC10 V1.0)." -f $ihVer)
+        }
+        $raw = New-Object byte[] $innerLen
+        [Array]::Copy($origRaw, 64, $raw, 0, $innerLen)
+        $isWebWrapped = $true
+    }
+
+    $totalLen = $raw.Length
 
     if ($totalLen -lt 32) {
         throw "Image too small ($totalLen bytes)."
@@ -232,7 +310,7 @@ function Test-RealtekBooterImage {
 
     $magic = [System.Text.Encoding]::ASCII.GetString($raw, 0, 4)
     if ($magic -ne "cr6c" -and $magic -ne "cs6c") {
-        throw "Unsupported image header magic '$magic' (expected 'cr6c' or 'cs6c')."
+        throw "Unsupported image header magic '$magic' (expected 'cr6c', 'cs6c', or 0x27051956 WebUI wrapper)."
     }
 
     $startAddr = Read-UInt32BE -Buffer $raw -Offset 4
@@ -288,17 +366,23 @@ function Test-RealtekBooterImage {
         $imageMode = "Dual-Segment Factory Stock (cr6c + $magic2)"
     }
 
+    if ($isWebWrapped) {
+        $imageMode = "Tenda 0x27051956 WebUI Wrapped -> $imageMode (auto-unwrapped 64 B)"
+    }
+
     $sha256 = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
     return [PSCustomObject]@{
-        Path      = $Path
-        FileSize  = $totalLen
-        Magic     = $magic
-        Mode      = $imageMode
-        StartAddr = ("0x{0:X8}" -f $startAddr)
-        BurnAddr  = ("0x{0:X8}" -f $burnAddr)
-        Seg1Len   = $seg1Len
-        Seg2Len   = $remLen
-        SHA256    = $sha256
+        Path         = $Path
+        FileSize     = $origRaw.Length
+        BooterSize   = $totalLen
+        Magic        = $magic
+        Mode         = $imageMode
+        StartAddr    = ("0x{0:X8}" -f $startAddr)
+        BurnAddr     = ("0x{0:X8}" -f $burnAddr)
+        Seg1Len      = $seg1Len
+        Seg2Len      = $remLen
+        SHA256       = $sha256
+        PayloadBytes = $raw
     }
 }
 
@@ -310,7 +394,7 @@ function Find-PhysicalEthernetAdapter {
     }
     $nic = Get-NetAdapter | Where-Object {
         $_.InterfaceDescription -notmatch 'Virtual|VPN|Fortinet|Bluetooth|TAP|Hyper-V|Npcap|Loopback' -and
-        $_.InterfaceDescription -match 'Intel|Realtek|Ethernet|I225|PCIe|GbE'
+        $_.InterfaceDescription -match 'Intel|Realtek|Broadcom|Ethernet|PCIe|GbE|LAN'
     } | Select-Object -First 1
     if (-not $nic) {
         throw "Could not locate physical Ethernet adapter."
@@ -397,7 +481,7 @@ if ($VerifyOnly) {
     exit 0
 }
 
-[byte[]]$payloadBytes = [System.IO.File]::ReadAllBytes($FirmwarePath)
+[byte[]]$payloadBytes = $imgInfo.PayloadBytes
 
 if ($DryRun) {
     $nic = Find-PhysicalEthernetAdapter -PreferredAlias $InterfaceAlias

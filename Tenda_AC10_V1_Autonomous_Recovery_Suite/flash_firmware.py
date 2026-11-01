@@ -30,7 +30,8 @@ if SUITE_DIR not in sys.path:
     sys.path.insert(0, SUITE_DIR)
 
 from tftp_emergency_engine import TftpClient, TftpServer, TftpError
-from verify_firmware import verify_image_file, fix_image_checksum, format_report
+from verify_firmware import verify_image_file, fix_image_checksum, format_report, unwrap_booter_payload
+import tempfile
 
 logger = logging.getLogger("RecoveryMaster")
 _network_switched = False
@@ -137,7 +138,7 @@ def main():
     parser.add_argument("--tftp-port", type=int, default=69,
                         help="TFTP port (default: 69)")
     parser.add_argument("--post-ip", default=None,
-                        help="Target OS IP to probe after reboot (192.168.0.1 for Stock, 192.168.1.1 for OpenWrt)")
+                        help="Target OS IP to probe after reboot (default: 192.168.0.1 for both Stock & Hybrid OpenWrt 4.14)")
     parser.add_argument("--timeout", type=int, default=180,
                         help="Bootloader discovery timeout in seconds (default: 180)")
 
@@ -148,23 +149,28 @@ def main():
     print("   Pure Python 3 RFC 1350 Dual-Mode Engine | Failsafe Network Rollback")
     print("#" * 72 + "\n")
 
+    repo_root = os.path.dirname(SUITE_DIR)
+    stock_candidates = [
+        os.path.join(repo_root, "01_Stock_Firmware_and_Partitions", "Tenda_AC10_V1_Stock_TFTP_Recovery.bin"),
+        os.path.join(SUITE_DIR, "backups", "Tenda_AC10_V1_Stock_TFTP_Recovery.bin"),
+        os.path.join(repo_root, "backups", "Tenda_AC10_V1_Stock_TFTP_Recovery.bin"),
+        os.path.join(SUITE_DIR, "backups", "mtd3_kernelfs.bin"),
+        os.path.join(SUITE_DIR, "backups", "kernel_cr6c.bin"),
+    ]
+    hybrid_candidates = [
+        os.path.join(repo_root, "02_Compiled_Hybrid_OpenWrt_4.14_Firmware", "tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin"),
+        os.path.join(repo_root, "tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin"),
+    ]
+
     # 1. Resolve Image Path
     image_path = args.image
     if args.stock:
-        stock_candidate = os.path.join(SUITE_DIR, "backups", "Tenda_AC10_V1_Stock_TFTP_Recovery.bin")
-        if not os.path.exists(stock_candidate):
-            stock_candidate = os.path.join(SUITE_DIR, "backups", "mtd3_kernelfs.bin")
-        if not os.path.exists(stock_candidate):
-            stock_candidate = os.path.join(SUITE_DIR, "backups", "kernel_cr6c.bin")
-        image_path = stock_candidate
+        image_path = next((p for p in stock_candidates if os.path.exists(p)), stock_candidates[0])
         print(f"[*] Stock restoration selected: Using verified image {image_path}")
 
     if not image_path:
-        # Check default recovery image in backups
-        default_img = os.path.join(SUITE_DIR, "backups", "Tenda_AC10_V1_Stock_TFTP_Recovery.bin")
-        if not os.path.exists(default_img):
-            default_img = os.path.join(SUITE_DIR, "backups", "mtd3_kernelfs.bin")
-        if os.path.exists(default_img):
+        default_img = next((p for p in (stock_candidates + hybrid_candidates) if os.path.exists(p)), None)
+        if default_img:
             image_path = default_img
             print(f"[*] No image specified: Defaulting to verified recovery binary:\n    {image_path}")
         else:
@@ -201,6 +207,21 @@ def main():
     else:
         print("[!] Warning: Image validation bypassed by --skip-verify flag.")
 
+    # Auto-unwrap 64-byte 0x27051956 Tenda WebUI wrapper if user passed webupgrade.bin
+    unwrapped_tmp_path = None
+    with open(image_path, "rb") as _f:
+        _raw_img = _f.read()
+    _inner_img, _web_meta, _web_errs = unwrap_booter_payload(_raw_img)
+    if _web_meta is not None and not _web_errs:
+        _fd, unwrapped_tmp_path = tempfile.mkstemp(prefix="ac10_unwrapped_", suffix=".bin")
+        with os.fdopen(_fd, "wb") as _tf:
+            _tf.write(_inner_img)
+        atexit.register(lambda p=unwrapped_tmp_path: os.path.exists(p) and os.remove(p))
+        print(f"[*] Auto-unwrapped 64-byte 0x27051956 Tenda WebUI header -> {len(_inner_img):,} B inner payload")
+        tftp_image_path = unwrapped_tmp_path
+    else:
+        tftp_image_path = image_path
+
     # 3. Stage 2: Administrator Check & Network Configuration
     if not args.skip_network_switch:
         if not check_admin():
@@ -235,7 +256,7 @@ def main():
 
     # Start background TFTP Server on port 69 in case booter issues RRQ
     tftp_server = TftpServer(bind_ip="0.0.0.0", bind_port=args.tftp_port,
-                             served_file=image_path, quiet=True)
+                             served_file=tftp_image_path, quiet=True)
     tftp_server.start_background()
 
     # Calculate retries for foreground client based on timeout (base timeout 1.5s per retry)
@@ -245,7 +266,7 @@ def main():
 
     transfer_ok = False
     try:
-        tftp_client.push_file(image_path, remote_filename="firmware.bin")
+        tftp_client.push_file(tftp_image_path, remote_filename="firmware.bin")
         transfer_ok = True
     except Exception as e:
         print(f"\n[*] Client WRQ attempt ended: {e}")
@@ -273,11 +294,9 @@ def main():
     print("  The blue SYS LED will flash rapidly during write, then restart.")
     print("=" * 72 + "\n")
 
-    # Determine post-reboot target IP
-    post_ip = args.post_ip
-    if not post_ip:
-        is_stock = args.stock or any(k in os.path.basename(image_path).lower() for k in ["stock", "kernelfs", "mtd3"])
-        post_ip = "192.168.0.1" if is_stock else "192.168.1.1"
+    # Both Stock Tenda OS and Hybrid OpenWrt 4.14 on Tenda AC10 V1.0 default to 192.168.0.1
+    post_ip = args.post_ip or "192.168.0.1"
+    is_stock = args.stock or any(k in os.path.basename(image_path).lower() for k in ["stock", "kernelfs", "mtd3"])
 
     print("[*] Waiting 60 seconds for flash write cycle and reboot...")
     for i in range(60):
@@ -304,11 +323,11 @@ def main():
     if os_detected:
         print("   RECOVERY / FLASHING COMPLETED SUCCESSFULLY!")
         print(f"   Access Web Interface: http://{post_ip}")
-        if post_ip == "192.168.0.1":
-            print("   Stock Firmware Web UI: http://192.168.0.1")
+        if is_stock:
+            print(f"   Stock Firmware Web UI: http://{post_ip}")
         else:
-            print("   OpenWrt LuCI Web UI:   http://192.168.1.1")
-            print("   OpenWrt SSH:           ssh root@192.168.1.1")
+            print(f"   OpenWrt LuCI Web UI:   http://{post_ip}")
+            print(f"   OpenWrt SSH:           ssh root@{post_ip}")
     else:
         print("   Firmware flashed! Router may take up to 3 minutes on first boot.")
         print(f"   Please check http://{post_ip} or your PC's assigned DHCP IP address.")

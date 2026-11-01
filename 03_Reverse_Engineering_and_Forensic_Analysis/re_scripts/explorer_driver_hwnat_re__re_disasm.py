@@ -1,13 +1,26 @@
+import os
+import lzma
 import struct
 import capstone
 
-KERNEL_BIN = r"/workspace/analysis\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin"
-SYMBOLS_TXT = r"K:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_kernel\vmlinux_symbols.txt"
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_STOCK_DIR = os.path.join(_REPO_ROOT, "01_Stock_Firmware_and_Partitions")
+KERNEL_BIN = os.environ.get("AC10_VMLINUX_BIN", os.path.join(_STOCK_DIR, "vmlinux_3.10.90_raw_0x80000000.bin"))
+KERNEL_CR6C = os.path.join(_STOCK_DIR, "kernel_cr6c_0x030000.bin")
+SYMBOLS_TXT = os.environ.get("AC10_SYMBOLS_TXT", os.path.join(_STOCK_DIR, "kallsyms_stock_31434.txt"))
 BASE_VA = 0x80000000
 
+def load_kernel_bytes():
+    if os.path.isfile(KERNEL_BIN):
+        with open(KERNEL_BIN, "rb") as f:
+            return f.read()
+    with open(KERNEL_CR6C, "rb") as f:
+        cr6c = f.read()
+    assert cr6c[:4] == b"cr6c", "Expected cr6c magic in kernel_cr6c_0x030000.bin"
+    return lzma.decompress(cr6c[16:])
+
 def load_environment():
-    with open(KERNEL_BIN, "rb") as f:
-        data = f.read()
+    data = load_kernel_bytes()
     symbols = {}
     sym_list = []
     with open(SYMBOLS_TXT, "r", encoding="utf-8") as f:

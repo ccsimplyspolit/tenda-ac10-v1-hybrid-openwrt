@@ -19,11 +19,15 @@ import sys
 import struct
 import argparse
 import hashlib
+import zlib
 
 # Realtek Booter Limits
 MAX_FLASH_IMAGE_SIZE = 8060928  # 0x7B0000 (7,872 KB)
 BURN_DESTINATION_SAFE = 0x00030000
 EXPECTED_LOAD_ADDR   = 0x80A00000
+TENDA_WEB_MAGIC      = b"\x27\x05\x19\x56"
+TENDA_WEB_IH_OS      = 2
+TENDA_WEB_IH_VER     = 0x00030028
 
 VALID_MAGICS = {
     b"cr6c": "Linux kernel + rootfs (Standard Tenda / OpenWrt)",
@@ -35,6 +39,61 @@ VALID_MAGICS = {
     b"ALL2": "Total Flash Image (No Checksum)",
     b"hsqs": "SquashFS filesystem",
 }
+
+
+def unwrap_booter_payload(data: bytes):
+    """
+    If data starts with Tenda's 64-byte 0x27051956 WebUI U-Boot wrapper,
+    validates ih_hcrc, ih_size, ih_dcrc, ih_os=2, ih_ver=0x00030028, and returns
+    (inner_bytes, web_meta_dict, errors_list). Otherwise returns (data, None, []).
+    """
+    if len(data) < 4 or data[:4] != TENDA_WEB_MAGIC:
+        return data, None, []
+    errors = []
+    if len(data) < 96:
+        return data, None, [f"Tenda 0x27051956 WebUI wrapper too small ({len(data)} bytes < 96)."]
+    if len(data) >= MAX_FLASH_IMAGE_SIZE:
+        errors.append(
+            f"Tenda 0x27051956 WebUI image ({len(data):,} B) violates check_mtd_size (< {MAX_FLASH_IMAGE_SIZE:,} B)!"
+        )
+    ih_magic, ih_hcrc, ih_time, ih_size, ih_load, ih_ep, ih_dcrc = struct.unpack_from(">7I", data, 0)
+    ih_os = data[0x20] if data[0x20] == TENDA_WEB_IH_OS else data[28]
+    (ver_0x24,) = struct.unpack_from(">I", data, 0x24)
+    (ver_0x20,) = struct.unpack_from(">I", data, 0x20)
+    ih_ver = ver_0x24 if ver_0x24 == TENDA_WEB_IH_VER else ver_0x20
+    ih_name = (
+        data[40:64].split(b"\x00", 1)[0].decode("ascii", errors="replace")
+        if ver_0x24 == TENDA_WEB_IH_VER
+        else data[36:64].split(b"\x00", 1)[0].decode("ascii", errors="replace")
+    )
+
+    hdr_zero = bytearray(data[:64])
+    hdr_zero[4:8] = b"\x00\x00\x00\x00"
+    calc_hcrc = zlib.crc32(bytes(hdr_zero)) & 0xFFFFFFFF
+    if ih_hcrc != 0 and ih_hcrc != calc_hcrc:
+        errors.append(f"Tenda 0x27051956 ih_hcrc mismatch: 0x{ih_hcrc:08X} != 0x{calc_hcrc:08X}")
+    inner = data[64:]
+    if ih_size != len(inner):
+        errors.append(f"Tenda 0x27051956 ih_size mismatch: header={ih_size}, actual={len(inner)}")
+    calc_dcrc = zlib.crc32(inner) & 0xFFFFFFFF
+    if ih_dcrc != calc_dcrc:
+        errors.append(f"Tenda 0x27051956 ih_dcrc mismatch: 0x{ih_dcrc:08X} != 0x{calc_dcrc:08X}")
+    if ih_os != TENDA_WEB_IH_OS:
+        errors.append(f"Tenda 0x27051956 ih_os={ih_os} invalid (expected {TENDA_WEB_IH_OS} = Linux)")
+    if ih_ver != TENDA_WEB_IH_VER:
+        errors.append(
+            f"Tenda 0x27051956 ih_ver=0x{ih_ver:08X} rejected (expected 0x{TENDA_WEB_IH_VER:08X} for Tenda AC10 V1.0)"
+        )
+    meta = {
+        "ih_hcrc": ih_hcrc,
+        "ih_dcrc": ih_dcrc,
+        "ih_size": ih_size,
+        "ih_os": ih_os,
+        "ih_ver": ih_ver,
+        "ih_name": ih_name,
+        "outer_size": len(data),
+    }
+    return inner, meta, errors
 
 
 def compute_16bit_be_checksum(data: bytes) -> int:
@@ -76,7 +135,7 @@ def parse_header(header_bytes: bytes):
 
 def verify_image_bytes(data: bytes):
     """
-    Verifies firmware binary data in-memory.
+    Verifies firmware binary data in-memory (including 64-byte 0x27051956 Tenda WebUI wrapper).
     Returns (is_valid: bool, results: dict).
     """
     results = {
@@ -86,8 +145,19 @@ def verify_image_bytes(data: bytes):
         "details": {}
     }
 
+    orig_size = len(data)
+    data, web_meta, web_errors = unwrap_booter_payload(data)
+    results["details"]["file_size"] = orig_size
+    results["details"]["is_webupgrade_wrapped"] = web_meta is not None
+    if web_meta is not None:
+        results["details"]["web_header"] = web_meta
+    if web_errors:
+        results["valid"] = False
+        results["errors"].extend(web_errors)
+        return False, results
+
     size = len(data)
-    results["details"]["file_size"] = size
+    results["details"]["booter_payload_size"] = size
 
     # 1. Size Check
     if size > MAX_FLASH_IMAGE_SIZE:

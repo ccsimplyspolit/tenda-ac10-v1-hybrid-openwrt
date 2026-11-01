@@ -1,6 +1,6 @@
 import sys
 import capstone
-from re_disasm import load_environment, resolve_symbol
+from explorer_driver_hwnat_re__re_disasm import load_environment, resolve_symbol
 
 data, symbols, sym_list = load_environment()
 md = capstone.Cs(capstone.CS_ARCH_MIPS, capstone.CS_MODE_MIPS32 + capstone.CS_MODE_LITTLE_ENDIAN)

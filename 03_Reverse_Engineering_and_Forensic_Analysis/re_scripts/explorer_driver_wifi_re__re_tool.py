@@ -1,15 +1,19 @@
-import sys
+import io
 import os
+import sys
+import lzma
 import capstone
 
-BIN_PATH = r'/workspace/analysis\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin'
-SYM_PATH = r'K:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_kernel\vmlinux_symbols.txt'
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_STOCK_DIR = os.path.join(_REPO_ROOT, "01_Stock_Firmware_and_Partitions")
+BIN_PATH = os.environ.get("AC10_VMLINUX_BIN", os.path.join(_STOCK_DIR, "vmlinux_3.10.90_raw_0x80000000.bin"))
+CR6C_PATH = os.path.join(_STOCK_DIR, "kernel_cr6c_0x030000.bin")
+SYM_PATH = os.environ.get("AC10_SYMBOLS_TXT", os.path.join(_STOCK_DIR, "kallsyms_stock_31434.txt"))
 LOAD_BASE = 0x80000000
 
-# Load symbols
 addr2sym = {}
 sym2addr = {}
-with open(SYM_PATH, 'r') as f:
+with open(SYM_PATH, "r", encoding="utf-8") as f:
     for line in f:
         parts = line.strip().split()
         if len(parts) >= 3:
@@ -18,9 +22,13 @@ with open(SYM_PATH, 'r') as f:
             addr2sym[addr] = name
             sym2addr[name] = addr
 
-# Open binary
-f_bin = open(BIN_PATH, 'rb')
-bin_size = os.path.getsize(BIN_PATH)
+if os.path.isfile(BIN_PATH):
+    _raw_bin = open(BIN_PATH, "rb").read()
+else:
+    _cr6c = open(CR6C_PATH, "rb").read()
+    _raw_bin = lzma.decompress(_cr6c[16:])
+f_bin = io.BytesIO(_raw_bin)
+bin_size = len(_raw_bin)
 
 def read_bytes(va, length):
     offset = va - LOAD_BASE

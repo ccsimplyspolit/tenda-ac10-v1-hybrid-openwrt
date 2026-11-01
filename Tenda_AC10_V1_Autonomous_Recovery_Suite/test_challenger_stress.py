@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Challenger Adversarial Stress Test Suite
-Target: tftp_emergency_engine.py in K:\\aoe4_dlc\\Tenda_AC10_V1_Autonomous_Recovery_Suite\\
+Target: Tenda_AC10_V1_Autonomous_Recovery_Suite/tftp_emergency_engine.py
 Author: challenger_o21_iter2_1
 """
 

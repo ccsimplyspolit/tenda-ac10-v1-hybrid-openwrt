@@ -2,7 +2,7 @@
 .SYNOPSIS
     Failsafe Network Adapter Switcher for Tenda AC10 V1.0 Emergency Recovery.
 .DESCRIPTION
-    Dynamically identifies the host's active physical Ethernet NIC (Intel I225-V, etc.),
+    Dynamically identifies the host's active physical Ethernet NIC (Intel / Realtek / Broadcom GbE),
     snapshots IPv4 and DNS configuration to network_state_backup.json,
     configures static IP 192.168.1.8/24 (Gateway 192.168.1.6), and guarantees
     restoration back to original DHCP/DNS settings via a 3-layer try/finally safety net.

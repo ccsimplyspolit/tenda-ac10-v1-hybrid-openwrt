@@ -1,0 +1,2 @@
+a7d4d27f7b1d52526e24348a6a21c5a56740d41b357b17c9e3bc4d8db9f9b0fa  Tenda_AC10_V1_Stock_TFTP_Recovery.bin
+023bc89c65c7c0c00ee6ca34b65c07644c3df62f3c38e76e760bcef54248dd33  kernel_cr6c.bin

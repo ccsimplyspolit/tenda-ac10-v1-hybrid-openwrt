@@ -188,10 +188,25 @@ class TestTftpEngine(unittest.TestCase):
 class TestFirmwareVerification(unittest.TestCase):
     """Verifies firmware validator and checksum engine."""
 
+    @staticmethod
+    def _find_stock_file(*names):
+        repo_root = os.path.dirname(SUITE_DIR)
+        search_dirs = [
+            os.path.join(repo_root, "01_Stock_Firmware_and_Partitions"),
+            os.path.join(SUITE_DIR, "backups"),
+            os.path.join(repo_root, "backups"),
+        ]
+        for d in search_dirs:
+            for n in names:
+                cand = os.path.join(d, n)
+                if os.path.exists(cand):
+                    return cand
+        return os.path.join(search_dirs[0], names[0])
+
     def test_04_stock_kernel_cr6c_passes(self):
         """Verifies real stock kernel_cr6c.bin passes validation with 0x0000 checksum."""
-        stock_kernel = os.path.join(SUITE_DIR, "backups", "kernel_cr6c.bin")
-        self.assertTrue(os.path.exists(stock_kernel), "kernel_cr6c.bin missing from backups!")
+        stock_kernel = self._find_stock_file("kernel_cr6c_0x030000.bin", "kernel_cr6c.bin")
+        self.assertTrue(os.path.exists(stock_kernel), f"kernel_cr6c missing: {stock_kernel}")
 
         is_valid, report = verify_image_file(stock_kernel)
         self.assertTrue(is_valid, f"kernel_cr6c.bin failed validation: {report.get('errors')}")
@@ -203,8 +218,8 @@ class TestFirmwareVerification(unittest.TestCase):
 
     def test_05_stock_recovery_image_passes(self):
         """Verifies real stock Tenda_AC10_V1_Stock_TFTP_Recovery.bin passes multi-segment validation."""
-        stock_recovery = os.path.join(SUITE_DIR, "backups", "Tenda_AC10_V1_Stock_TFTP_Recovery.bin")
-        self.assertTrue(os.path.exists(stock_recovery), "Tenda_AC10_V1_Stock_TFTP_Recovery.bin missing from backups!")
+        stock_recovery = self._find_stock_file("Tenda_AC10_V1_Stock_TFTP_Recovery.bin")
+        self.assertTrue(os.path.exists(stock_recovery), f"Stock recovery image missing: {stock_recovery}")
 
         is_valid, report = verify_image_file(stock_recovery)
         self.assertTrue(is_valid, f"Tenda_AC10_V1_Stock_TFTP_Recovery.bin failed validation: {report.get('errors')}")
@@ -217,6 +232,15 @@ class TestFirmwareVerification(unittest.TestCase):
         self.assertEqual(report["details"]["seg2_checksum_val"], 0x0000)
         self.assertEqual(report["details"]["file_size"], 7588884)
         self.assertLessEqual(report["details"]["file_size"], MAX_FLASH_IMAGE_SIZE)
+
+        # Also verify 64-byte 0x27051956 webupgrade.bin if compiled firmware directory exists
+        web_fw = os.path.join(os.path.dirname(SUITE_DIR), "02_Compiled_Hybrid_OpenWrt_4.14_Firmware", "tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin")
+        if os.path.exists(web_fw):
+            w_ok, w_rep = verify_image_file(web_fw)
+            self.assertTrue(w_ok, f"webupgrade.bin failed validation: {w_rep.get('errors')}")
+            self.assertTrue(w_rep["details"]["is_webupgrade_wrapped"])
+            self.assertEqual(w_rep["details"]["magic"], b"cs6c")
+            self.assertEqual(w_rep["details"]["checksum_val"], 0x0000)
 
     def test_06_corrupted_images_rejected(self):
         """Verifies corrupted images are rejected with specific errors."""
@@ -297,11 +321,11 @@ class TestNetworkStateSerialization(unittest.TestCase):
         state = {
             "Timestamp": "2026-11-01T04:00:00Z",
             "InterfaceAlias": "Ethernet",
-            "InterfaceDescription": "Intel(R) Ethernet Controller (3) I225-V",
+            "InterfaceDescription": "Physical Gigabit Ethernet Adapter",
             "InterfaceIndex": 12,
             "DhcpEnabled": True,
             "IPAddresses": [
-                {"IPAddress": "192.168.0.176", "PrefixLength": 24}
+                {"IPAddress": "192.168.0.100", "PrefixLength": 24}
             ],
             "DefaultGateway": "192.168.0.1",
             "DnsServers": ["1.1.1.1", "8.8.8.8", "192.168.0.1"]
@@ -319,7 +343,7 @@ class TestNetworkStateSerialization(unittest.TestCase):
             self.assertTrue(loaded["DhcpEnabled"])
             self.assertEqual(loaded["DefaultGateway"], "192.168.0.1")
             self.assertEqual(len(loaded["DnsServers"]), 3)
-            self.assertEqual(loaded["IPAddresses"][0]["IPAddress"], "192.168.0.176")
+            self.assertEqual(loaded["IPAddresses"][0]["IPAddress"], "192.168.0.100")
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)

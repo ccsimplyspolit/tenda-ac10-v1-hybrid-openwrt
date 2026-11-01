@@ -1,6 +1,6 @@
 # Comparative Technical Survey & Architectural Assessment: OpenWrt Implementations on Realtek RTL8197F / RTL8822BE / RTL8367
 
-**Document Path**: `k:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_openwrt\handoff.md`  
+**Document Path**: `03_Reverse_Engineering_and_Forensic_Analysis/07_OpenWrt_4.14_5.4_5.10_Ecosystem_and_Driver_Survey.md`  
 **Investigator**: `explorer_o19_survey_openwrt` (Authoritative OpenWrt & Driver Explorer)  
 **Date**: 2026-11-01  
 **Scope**: `vladisslav2011/openwrt-AC10`, `ADCDS/openwrt-dlink-dir842-r1`, `Putpocket/iptime-a2004mu-openwrt`, upstream Linux/OpenWrt `rtw88` calibration, hardware differences, and feasibility assessment for Tenda AC10 V1.0.

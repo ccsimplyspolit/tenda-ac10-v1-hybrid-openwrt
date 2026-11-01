@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Adversarial Stress Test Suite for TFTP Emergency Engine
-Target: K:\\aoe4_dlc\\Tenda_AC10_V1_Autonomous_Recovery_Suite\\tftp_emergency_engine.py
+Target: Tenda_AC10_V1_Autonomous_Recovery_Suite/tftp_emergency_engine.py
 
 Strict Constraints:
 - Loopback (127.0.0.1) ONLY. Zero packets to 192.168.0.1.

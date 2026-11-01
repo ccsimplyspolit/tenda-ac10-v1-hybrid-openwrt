@@ -2,7 +2,7 @@
 
 ## 1. Observation
 
-Direct extraction from live hardware at `http://192.168.0.1` and extracted system diagnostics (`k:\aoe4_dlc\.agents\teamwork\explorer_firmware_research\syslog_extracted\syslog\`):
+Direct extraction from live hardware at `http://192.168.0.1` and extracted system diagnostics (`diagnostics/syslog_extracted/syslog\`):
 
 1. **Hardware & Platform Identity**:
    - `macro_config.js`:
@@ -83,8 +83,8 @@ Direct extraction from live hardware at `http://192.168.0.1` and extracted syste
      Both 2.4 GHz and 5 GHz wireless interfaces flapped DOWN and UP 5 times within 112 seconds.
 
 4. **Network & Binding Configuration (`goform/getWanParameters` & `GetSystemStatus`)**:
-   - WAN Interface: `eth1` (tagged via `vlan3`), Static IP `198.51.100.44`, Subnet Mask `255.255.255.0`, Gateway `198.51.100.1`.
-   - DNS: `1.1.1.1`, `1.1.1.1`.
+   - WAN Interface: `eth1` (tagged via `vlan3`), Static IP `198.51.100.10`, Subnet Mask `255.255.255.0`, Gateway `198.51.100.1`.
+   - DNS: `1.1.1.1`, `8.8.8.8`.
    - Cloned WAN MAC: `<YOUR_WAN_MAC>` (ISP MAC bound).
    - Native Hardware LAN MAC: `50:0F:F5:00:00:00`.
    - Legacy stored VPN credentials in NVRAM: `<YOUR_VPN_USER>` / `REDACTED_PPTP_PASSWORD` / `<YOUR_VPN_SERVER>` (`vpnClient: "0"` - currently inactive).
@@ -161,7 +161,7 @@ Direct extraction from live hardware at `http://192.168.0.1` and extracted syste
      - If spontaneous reboots occur during heavy load, replace the aging 12V 1A power brick with a fresh 12V 1.5A–2.0A adapter.
    - **Step 2 (Conditional Downgrade to .51)**:
      - If Wi-Fi flapping and disconnects persist despite Step 1, perform a controlled downgrade to `V15.03.06.51_multi`.
-     - **MANDATORY SAFEGUARD**: Export configuration backup first; ensure wired Ethernet connection; manually re-enter Static IP `198.51.100.44`, Gateway `198.51.100.1`, and cloned WAN MAC `<YOUR_WAN_MAC>` post-flash, as the factory reset will revert to native MAC `50:0F:F5:00:00:00` and disconnect the ISP.
+     - **MANDATORY SAFEGUARD**: Export configuration backup first; ensure wired Ethernet connection; manually re-enter Static IP `198.51.100.10`, Gateway `198.51.100.1`, and cloned WAN MAC `<YOUR_WAN_MAC>` post-flash, as the factory reset will revert to native MAC `50:0F:F5:00:00:00` and disconnect the ISP.
 
 ---
 
@@ -174,9 +174,9 @@ Direct extraction from live hardware at `http://192.168.0.1` and extracted syste
    *Expected*: `adv_firm_ver: "V15.03.06.52_multi"`, `adv_hard_ver: "V1.0"`.
 
 2. **Verify Extracted Internal Diagnostics**:
-   - Inspect `k:\aoe4_dlc\.agents\teamwork\explorer_firmware_research\syslog_extracted\syslog\sys_info.log` for process table (`ps`) and `MemFree` (< 2500 kB).
-   - Inspect `k:\aoe4_dlc\.agents\teamwork\explorer_firmware_research\syslog_extracted\syslog\wl_info.log` for `cnt_mu_swqoverflow` (8341) and `chipVersion: RTL8822B MP`.
-   - Inspect `k:\aoe4_dlc\.agents\teamwork\explorer_firmware_research\syslog_extracted\syslog\logs.txt` for Wi-Fi UP/DOWN cycle timestamps.
+   - Inspect `diagnostics/syslog_extracted/syslog\sys_info.log` for process table (`ps`) and `MemFree` (< 2500 kB).
+   - Inspect `diagnostics/syslog_extracted/syslog\wl_info.log` for `cnt_mu_swqoverflow` (8341) and `chipVersion: RTL8822B MP`.
+   - Inspect `diagnostics/syslog_extracted/syslog\logs.txt` for Wi-Fi UP/DOWN cycle timestamps.
 
 3. **Invalidation Conditions**:
    - If physical label shows "AC10 V2.0", "V3.0", or "V4.0" (disproved by `adv_hard_ver: "V1.0"` and `rtl8197F` SoC signature).

@@ -1,9 +1,9 @@
 # Technical Handoff Report: Deep Static Reverse Engineering of rtl865x ASIC HW NAT & RTL8367 Switch Driver in Stock Kernel
 
 - **Target Binary**: `/workspace/analysis\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin` (7,253,712 bytes, MIPS32 LE Linux 3.10.90, virtual base `0x80000000`)
-- **Symbol Table**: `K:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_kernel\vmlinux_symbols.txt` (31,434 recovered symbols)
+- **Symbol Table**: `01_Stock_Firmware_and_Partitions/kallsyms_stock_31434.txt` (31,434 recovered symbols)
 - **Investigating Agent**: `explorer_driver_hwnat_re`
-- **Working Directory**: `K:\aoe4_dlc\.agents\teamwork\explorer_driver_hwnat_re\`
+- **Working Directory**: `03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/`
 - **Date**: 2026-11-01
 
 ---
@@ -339,35 +339,35 @@ In `ADCDS/openwrt-dlink-dir842-r1` (`docs/HWNAT-OFFLOAD.md` and `drivers/net/rtl
 ## 5. Verification Method
 
 ### 5.1 Verification Commands and Disassembly Validation
-To independently reproduce and verify every finding in this report, execute the Python verification scripts created in `K:\aoe4_dlc\.agents\teamwork\explorer_driver_hwnat_re\`:
+To independently reproduce and verify every finding in this report, execute the Python verification scripts created in `03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/`:
 
 1. **Verify Core HW NAT Function Offsets**:
    ```powershell
-   python K:\aoe4_dlc\.agents\teamwork\explorer_driver_hwnat_re\analyze_hwnat.py
+   python 03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/analyze_hwnat.py
    ```
    *Expected Output*: Disassembles `rtl_nat_init_hooks` at `0x8047f57c` calling `rtl865x_handle_nat` (`0x8047e040`), and `FastPath_Enter` at `0x80473290`.
 
 2. **Verify ASIC SRAM Table Functions & Table Types**:
    ```powershell
-   python K:\aoe4_dlc\.agents\teamwork\explorer_driver_hwnat_re\trace_tables.py
+   python 03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/trace_tables.py
    ```
    *Expected Output*: Identifies table types `0x09` for NAPT, `0x07` for Routing, `0x0b` for NextHop, `0x02` for ARP, and `0x13`/`0x12` for ExtIntIp.
 
 3. **Verify TLU MMIO Control Sequence (0xbb804418 & 0xbb804d00)**:
    ```powershell
-   python K:\aoe4_dlc\.agents\teamwork\explorer_driver_hwnat_re\disasm_tlu.py
+   python 03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/disasm_tlu.py
    ```
    *Expected Output*: Shows bit 18 set/poll sequence on `0xbb804418` and command issuance on `0xbb804d00`.
 
 4. **Verify SMI GPIO Pinout (GPIO 18 Clock, GPIO 19 Data, GPIO 58 Reset)**:
    ```powershell
-   python K:\aoe4_dlc\.agents\teamwork\explorer_driver_hwnat_re\find_smi_pins.py
+   python 03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/find_smi_pins.py
    ```
    *Expected Output*: Shows `smi_init` storing `0x203` (GPIO 19) into data register `0x80c22984` and `0x202` (GPIO 18) into clock register `0x80c22980`, with `_smi_start` clocking bit transactions on GPIO 18 and sampling data on GPIO 19.
 
 5. **Verify Switch CPU Port 6 and VLAN Tagging**:
    ```powershell
-   python K:\aoe4_dlc\.agents\teamwork\explorer_driver_hwnat_re\inspect_vlan_setup.py
+   python 03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/inspect_vlan_setup.py
    ```
    *Expected Output*: Shows `rtk_cpu_tagPort_get(6, 2)` and validation against `r8367_cpu_port` (`0x805a5b9c` = 6).
 

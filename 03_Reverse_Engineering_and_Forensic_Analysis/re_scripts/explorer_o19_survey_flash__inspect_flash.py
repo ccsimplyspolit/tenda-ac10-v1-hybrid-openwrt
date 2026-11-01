@@ -1,11 +1,10 @@
 import os
 import struct
 
-FLASH_PATH = r"/workspace/analysis\21647d8e-3d9c-493f-900f-f13429d32667\scratch\Tenda_AC10_V1_FullFlash_8MB.bin"
+from explorer_driver_hwnat_re__re_disasm import load_kernel_bytes as _load_vmlinux_stock
 
 def analyze_flash():
-    with open(FLASH_PATH, "rb") as f:
-        data = f.read()
+            data = _load_vmlinux_stock()
 
     print(f"Total flash size: {len(data)} bytes ({len(data)/(1024*1024):.2f} MB)")
 

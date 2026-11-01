@@ -29,12 +29,12 @@ The kernel contains a fully intact standard Linux `kallsyms` table with token ta
 - `kallsyms_markers`: `0x805283a0` (file offset `0x005283a0`), 123 marker offsets indexing every 256th symbol name.
 - `kallsyms_token_table`: `0x80528590` (file offset `0x00528590`), null-terminated byte strings representing 256 tokens (e.g. `Ti`, `on_`, `ate`, `8822B`, `Trtl8367`).
 - `kallsyms_token_index`: `0x80528900` (file offset `0x00528900`), 256 two-byte offsets into `token_table`.
-- **Result**: 100% of the 31,434 symbols were successfully recovered and dumped to `k:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_kernel\vmlinux_symbols.txt`.
+- **Result**: 100% of the 31,434 symbols were successfully recovered and dumped to `01_Stock_Firmware_and_Partitions/kallsyms_stock_31434.txt`.
 
 ### 1.3 `rtl8192cd` & RTL8822B Factory RF Calibration (`mtd1` Layout)
 - **MTD Layout**:
   - Partition `mtd1` (named `board_data` or `cal`) is located in the SPI flash at offset `0x00020000`–`0x00030000` (size: 65,536 bytes / 64 KB).
-  - Header: Starts with magic byte sequence `7d 2a ed de` (`0xdeed2a7d`) followed by 4 null bytes (`00 00 00 00`).
+  - Header: Starts with magic byte sequence `10 95 d3 57` (`0x57d39510` per-unit `uint32_le(CRC32(mtd1[8:]))` on sanitized sample) followed by 4 null bytes (`00 00 00 00`).
 - **Verbatim ASCII Calibration Content** (extracted from flash dump):
   - **5 GHz Radio (wlan0: Realtek RTL8822BE PCIe module)**:
     ```ini
@@ -133,7 +133,7 @@ The kernel contains a fully intact standard Linux `kallsyms` table with token ta
    - Deduction: The kernel retains full unstripped debugging symbol metadata. Reconstructing the token index and decoding names yielded exact function names and addresses for every driver in the system.
 
 3. **RF Calibration Path**:
-   - Observation: The flash dump contains ASCII calibration data starting at `0x00020000` with magic `0xdeed2a7d`. The kernel symbol table contains no functions matching `mtd1`, `read_cal_from_flash`, or direct MTD partition parsers inside `rtl8192cd`.
+   - Observation: The flash dump contains ASCII calibration data starting at `0x00020000` with header `uint32_le(CRC32(mtd1[8:]))` (e.g. `0x57d39510`). The kernel symbol table contains no functions matching `mtd1`, `read_cal_from_flash`, or direct MTD partition parsers inside `rtl8192cd`.
    - Observation: Functions `set_mib_default_tbl` (`0x80316914`) and `halmac_parse_efuse_data_88xx` (`0x80373268`) operate on MIB buffers passed from userspace `ioctl`. In the flash dump, the PCIe EFUSE region of the RTL8822BE radio is unwritten (`0xff`).
    - Deduction: Tenda/Realtek firmware offloads calibration parsing entirely to the userland `cfm` daemon. The driver expects calibration data to be pushed into it via software MIB tables rather than reading SPI flash directly.
 
@@ -178,7 +178,7 @@ The hardware architecture of the Tenda AC10 V1.0 is now completely reverse engin
 | **CPU Switch Port** | Port 6 (RGMII) | Connected to RTL8197F GMAC0 with CPU tag |
 | **WAN RJ45 Port** | Switch Port 0 | Isolated into VLAN 2 |
 | **LAN 1–3 RJ45 Ports** | Switch Ports 1, 2, 3 | Grouped into VLAN 1 |
-| **Flash Calibration MTD** | `mtd1` (`0x00020000`–`0x00030000`, 64 KB) | Magic `0xdeed2a7d`, ASCII key-value pairs |
+| **Flash Calibration MTD** | `mtd1` (`0x00020000`–`0x00030000`, 64 KB) | Per-unit `CRC32(mtd1[8:])` (`0x57d39510` sanitized), ASCII key-value pairs |
 | **5 GHz PCIe Radio** | Realtek RTL8822BE (PCIe slot) | Physical EFUSE is empty; uses `HW_WLAN0_*` keys |
 | **2.4 GHz SoC Radio** | Realtek RTL8197F integrated MAC/BB | SoC EFUSE at `0xb8000700`; uses `HW_WLAN1_*` keys |
 | **HW NAT ASIC Engine** | Realtek RTL865x FastPath | MMIO base `0xbb800000`, `TLU_CTRL` `0xbb804418` |
@@ -190,7 +190,7 @@ The hardware architecture of the Tenda AC10 V1.0 is now completely reverse engin
 ### 5.1 Verifying Symbols and Kernel Base
 Run the Python symbol extractor against `vmlinux_stock.bin`:
 ```bash
-python k:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_kernel\parse_kernel.py
+python 03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/parse_kernel.py
 ```
 **Expected Output**:
 - Finds `kallsyms_num_syms` = `0x00007aca` (31,434 symbols).
@@ -205,7 +205,7 @@ python k:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_kernel\parse_kernel.py
 ### 5.2 Verifying Switch GPIO Pin Assignments
 Run the platform SPI disassembly script:
 ```bash
-python k:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_kernel\disasm_plat_spi.py
+python 03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/disasm_plat_spi.py
 ```
 **Expected Output**:
 - Displays disassembly of `plat_spi_init` (0x806c0060).

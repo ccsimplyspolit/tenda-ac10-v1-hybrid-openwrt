@@ -69,9 +69,9 @@ At flash offset `0x030000`, the kernel contains a 64-byte `cr6c` image descripto
 ### 1.2 MTD1 Factory RF Calibration Partition Dissection (0x020000 - 0x030000)
 - Partition size: `65,536` bytes (`64 KB`).
 - Offset: `0x020000` to `0x030000`.
-- Extracted binary saved: `k:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_flash\mtd1_factory_calibration.bin`.
+- Extracted binary saved: `01_Stock_Firmware_and_Partitions/mtd1_factory_cfg_rf_cal_0x020000_64KB_sanitized.bin`.
 - Header:
-  - First 4 bytes (0x020000..0x020003): `7D 2A ED DE` (`0xDEED2A7D` Little-Endian, `0x7D2AEDDE` Big-Endian).
+  - First 4 bytes (0x020000..0x020003): `10 95 D3 57` (`0x57D39510` Little-Endian per-unit `CRC32(mtd1[8:65536])` on sanitized sample).
   - Next 4 bytes (0x020004..0x020007): `00 00 00 00`.
 - Structure: Text-based MIB key-value format. Contains exactly 40 newline-separated (`\x0A`) entries spanning offset `0x020008` to `0x0208B4` (2,221 bytes of text). All remaining bytes (`0x0208B5` to `0x02FFFF`) are padded with `0xFF`.
 
@@ -92,8 +92,8 @@ At flash offset `0x030000`, the kernel contains a 64-byte `cr6c` image descripto
 | `+0x0227` | `0x020227` | `TD_WLAN1_POWER` | `0` | Tenda 2.4G power mode offset |
 | `+0x0238` | `0x020238` | `HW_WLAN1_TX_POWER_DIFF_OFDM` | `1111112222222222223333333333` | 2.4G OFDM power delta across 14 channels |
 | `+0x0271` | `0x020271` | `TD_ACCESS_WRITE` | `on` | Factory write permission flag |
-| `+0x0284` | `0x020284` | `HW_WLAN0_WSC_PIN` | `16588547` | WPS PIN for 5 GHz interface |
-| `+0x029E` | `0x02029E` | `HW_WLAN1_WSC_PIN` | `16588547` | WPS PIN for 2.4 GHz interface |
+| `+0x0284` | `0x020284` | `HW_WLAN0_WSC_PIN` | `00000000` | WPS PIN for 5 GHz interface |
+| `+0x029E` | `0x02029E` | `HW_WLAN1_WSC_PIN` | `00000000` | WPS PIN for 2.4 GHz interface |
 | `+0x02B8` | `0x0202B8` | `HW_WLAN0_11N_XCAP` | `27` | **5 GHz (RTL8822BE) Crystal Oscillator Capacitor (0x1B = 27)** |
 | `+0x02CD` | `0x0202CD` | `HW_WLAN1_11N_XCAP` | `46` | **2.4 GHz (RTL8197FS) Crystal Oscillator Capacitor (0x2E = 46)** |
 | `+0x02E2` | `0x0202E2` | `HW_WLAN0_11N_THER` | `25` | **5 GHz (RTL8822BE) Thermal Sensor Base Value (0x19 = 25)** |
@@ -111,7 +111,7 @@ At flash offset `0x030000`, the kernel contains a 64-byte `cr6c` image descripto
 | `+0x076F` | `0x02076F` | `HW_WLAN1_REG_DOMAIN` | `13` | Regulatory domain ID 13 |
 | `+0x0786` | `0x020786` | `TD_WLAN0_WLAN_COUNTRY` | `US` | Factory default regulatory country for 5 GHz |
 | `+0x079F` | `0x02079F` | `TD_WLAN1_WLAN_COUNTRY` | `US` | Factory default regulatory country for 2.4 GHz |
-| `+0x07B8` | `0x0207B8` | `ucloud_serialnum` | `6590985` | Tenda Cloud registration serial number |
+| `+0x07B8` | `0x0207B8` | `ucloud_serialnum` | `0000000` | Tenda Cloud registration serial number |
 | `+0x07D1` | `0x0207D1` | `FLAG_OF_CE_LIMIT_POWER` | `open` | CE power limit bypass flag (`open` = full power allowed) |
 | `+0x07ED` | `0x0207ED` | `TD_ATE_SN` | *(empty)* | Factory ATE serial number field |
 | `+0x07F8` | `0x0207F8` | `HW_WLAN1_TX_POWER_CCK_A` | `2020202222222222222626262626` | 2.4G Path A CCK base TX power (14 channels: ch1-3=32, ch4-9=34, ch10-14=38) |
@@ -179,7 +179,7 @@ Each compressed block in Tenda's SquashFS is a standalone customized `.xz` strea
 ```
 
 #### Decompression Empirical Proof
-Running `k:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_flash\tenda_squashfs_extractor.py` against all 181 blocks:
+Running `03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/tenda_squashfs_extractor.py` against all 181 blocks:
 - Total blocks extracted: **181 / 181 (100.0% success rate, 0 corrupt blocks)**.
 - Total uncompressed filesystem size: **20,294,917 bytes (19.35 MB)**.
 - Compression ratio: **0.27x (26.8%)**.
@@ -199,7 +199,7 @@ Tracing `/etc_ro/init.d/rcS`, `/bin/wlan.sh`, `/bin/wlanapp.sh`, `/bin/flash`, `
 3. **Wireless Parameter Injection (`wlan.sh` -> `flash get` -> `iwpriv set_mib`)**:
    - `wlan.sh` calls `flash get <MIB_NAME>`.
    - `bin/flash` calls `apmib_get()` in `libapmib.so`.
-   - `libapmib.so` uses `libmtdapi.so` (`rtl_name_to_mtdchar`) to parse `/proc/mtd`, locates partition `"CFG"` (which corresponds to `mtd1` / `0x020000`), opens `/dev/mtd2` (or `/dev/mtdblock2`), verifies magic `0xDEED2A7D`, and returns the unit's calibrated values.
+   - `libapmib.so` uses `libmtdapi.so` (`rtl_name_to_mtdchar`) to parse `/proc/mtd`, locates partition `"CFG"` (which corresponds to `mtd1` / `0x020000`), opens `/dev/mtd2` (or `/dev/mtdblock2`), verifies header `uint32_le(CRC32(mtd1[8:]))` (e.g. `0x57D39510`), and returns the unit's calibrated values.
    - `wlan.sh` sets MAC addresses:
      - `ifconfig wlan0 hw ether 50:0F:F5:00:00:05`
      - `ifconfig wlan1 hw ether 50:0F:F5:00:00:01`
@@ -232,7 +232,7 @@ Tracing `/etc_ro/init.d/rcS`, `/bin/wlan.sh`, `/bin/wlanapp.sh`, `/bin/flash`, `
 
 3. **Factory RF Calibration Format Contrast**:
    - Standard Realtek reference boards store calibration as a binary struct `HW_SETTING` starting with `HS` or `HS0`.
-   - Observation 1.2 demonstrates Tenda AC10 V1.0 uses a text-based MIB format with magic `7D 2A ED DE` (`0xDEED2A7D`), containing 40 keys.
+   - Observation 1.2 demonstrates Tenda AC10 V1.0 uses a text-based MIB format with magic `10 95 D3 57` (`0x57D39510` per-unit CRC32 on sanitized sample), containing 40 keys.
    - In `webroot_ro/apmib.cfg`, the firmware includes a default template with dummy MACs (`00:90:4C:88:88:88`) and generic RF values.
    - Observation 1.2 proves that `mtd1` overrides this template with the router's individual hardware calibrations (e.g. MAC `50:0F:F5:00:00:00`, crystal caps 27 and 46, thermal baseline 25 and 32).
    - In OpenWrt 2026 ports (`ADCDS` / `Putpocket`), the open-source driver `rtw88` attempts to read eFuse from the RTL8822BE PCIe card. Because Tenda leaves the physical eFuse blank and places all calibration in `mtd1`, `rtw88` fails to load RF parameters, dropping 5 GHz to 58 Mbps HT20 with a 17 dB power deficit.
@@ -258,7 +258,7 @@ Tracing `/etc_ro/init.d/rcS`, `/bin/wlan.sh`, `/bin/wlanapp.sh`, `/bin/flash`, `
 
 1. **Partition Table**: The flash partition layout is definitively verified:
    - `0x000000 - 0x020000`: `Bootloader` (128 KB)
-   - `0x020000 - 0x030000`: `CFG` (Factory Calibration, 64 KB, magic `0xDEED2A7D`)
+   - `0x020000 - 0x030000`: `CFG` (Factory Calibration, 64 KB, header `uint32_le(CRC32(mtd1[8:]))` (e.g. `0x57D39510`))
    - `0x030000 - 0x23BC12`: `KernelFS` / Linux Kernel (2,095 KB, `cr6c`)
    - `0x23BC12 - 0x76BD76`: `RootFS` / SquashFS 4.0 LE (5,312 KB, custom Tenda XZ)
    - `0x76BD76 - 0x7E0000`: Unused / Free Flash (464.6 KB)
@@ -279,21 +279,21 @@ To independently reproduce and verify all findings:
 
 1. **Verify Flash Partitions & Kernel Table**:
    ```powershell
-   python k:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_flash\analyze_partitions.py
-   python k:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_flash\dump_mtd_table.py
+   python 03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/analyze_partitions.py
+   python 03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/dump_mtd_table.py
    ```
    *Expected Output*: MTD partitions match exact offsets `0x0`, `0x20000`, `0x30000`, `0x23BC12`, `0x7E0000`, `0x7F0000`.
 
 2. **Verify MTD1 Factory Calibration Extraction**:
    ```powershell
-   python k:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_flash\parse_mtd1.py
-   python k:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_flash\dissect_rf.py
+   python 03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/parse_mtd1.py
+   python 03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/dissect_rf.py
    ```
-   *Expected Output*: Exactly 40 parsed keys, magic `0xDEED2A7D`, MAC addresses `500FF5000000` / `500FF5000005` / `500FF5000001`, and 196-channel 5G power tables.
+   *Expected Output*: Exactly 40 parsed keys, header `uint32_le(CRC32(mtd1[8:]))` (e.g. `0x57D39510`), MAC addresses `500FF5000000` / `500FF5000005` / `500FF5000001`, and 196-channel 5G power tables.
 
 3. **Verify SquashFS Decompression**:
    ```powershell
-   python k:\aoe4_dlc\.agents\teamwork\explorer_o19_survey_flash\tenda_squashfs_extractor.py
+   python 03_Reverse_Engineering_and_Forensic_Analysis/re_scripts/tenda_squashfs_extractor.py
    ```
    *Expected Output*: `Valid blocks: 181 / 181 (100.0%)`, `Total Uncompressed Data: 20,294,917 bytes`.
 

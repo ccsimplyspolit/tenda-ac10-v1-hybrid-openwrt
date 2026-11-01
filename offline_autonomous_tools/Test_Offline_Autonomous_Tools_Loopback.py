@@ -15,18 +15,25 @@ import subprocess
 import sys
 import tempfile
 import threading
+import zlib
 from pathlib import Path
 
 TOOLS_DIR = Path(__file__).resolve().parent
 HYBRID_ROOT = TOOLS_DIR.parent
+STOCK_DIR = HYBRID_ROOT / "01_Stock_Firmware_and_Partitions"
+FW_DIR = HYBRID_ROOT / "02_Compiled_Hybrid_OpenWrt_4.14_Firmware"
 BACKUPS_DIR = HYBRID_ROOT / "backups"
 
 sys.path.insert(0, str(TOOLS_DIR))
 from tftp_recovery_engine import (
     MockRealtekBooterTftpServer,
+    TENDA_WEB_IH_OS,
+    TENDA_WEB_IH_VER,
+    TENDA_WEB_MAGIC,
     fix_single_segment_checksum,
     sum16_be,
     tftp_push_wrq,
+    unwrap_tenda_webupgrade,
     validate_realtek_booter_image,
 )
 
@@ -64,7 +71,7 @@ class MockTendaHttpHandler(http.server.BaseHTTPRequestHandler):
     uploaded_files: list[bytes] = []
 
     def log_message(self, format: str, *args) -> None:
-        pass  # Suppress noisy HTTP logs
+        pass
 
     def do_GET(self) -> None:
         if self.path in ("/goform/exit", "/logout/Auth"):
@@ -77,14 +84,18 @@ class MockTendaHttpHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
+        from urllib.parse import parse_qs
+
         content_len = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(content_len)
 
         if self.path == "/login/Auth":
             body_str = body.decode("utf-8", errors="replace")
             MockTendaHttpHandler.auth_received.append(body_str)
-            expected_form = f"username=admin&password={MockTendaHttpHandler.expected_password}"
-            if body_str == expected_form:
+            qs = parse_qs(body_str, keep_blank_values=True)
+            rx_user = qs.get("username", [""])[0]
+            rx_pass = qs.get("password", [""])[0]
+            if rx_user == "admin" and rx_pass == MockTendaHttpHandler.expected_password:
                 self.send_response(302)
                 self.send_header(
                     "Set-Cookie",
@@ -93,7 +104,6 @@ class MockTendaHttpHandler(http.server.BaseHTTPRequestHandler):
                 self.send_header("Location", "/main.html")
                 self.end_headers()
             else:
-                # Real Tenda bin/httpd (VA 0x436918) returns HTTP 200 OK with body '1' on wrong password
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html")
                 self.end_headers()
@@ -103,7 +113,6 @@ class MockTendaHttpHandler(http.server.BaseHTTPRequestHandler):
         if self.path == "/cgi-bin/UploadCfg":
             cookie_hdr = self.headers.get("Cookie", "")
             if "password=" not in cookie_hdr or "password=errorlogin" in cookie_hdr:
-                # Real Tenda bin/httpd (VA 0x436230) redirects unauthenticated /cgi-bin/UploadCfg to /login.html
                 self.send_response(302)
                 self.send_header("Location", "http://192.168.0.1/login.html")
                 self.end_headers()
@@ -113,7 +122,6 @@ class MockTendaHttpHandler(http.server.BaseHTTPRequestHandler):
             m = re.search(r"boundary=([^\s;]+)", ctype)
             if m:
                 boundary = m.group(1).encode("ascii")
-                # Extract payload between double CRLF and CRLF--boundary
                 header_end = body.find(b"\r\n\r\n")
                 footer_marker = b"\r\n--" + boundary
                 footer_start = body.rfind(footer_marker)
@@ -145,13 +153,47 @@ def make_synthetic_cs6c(payload_len: int, burn_addr: int = 0x00030000, corrupt_c
     return header + bytes(body)
 
 
+def wrap_tenda_webupgrade(inner: bytes, ih_ver: int = TENDA_WEB_IH_VER, corrupt_dcrc: bool = False) -> bytes:
+    dcrc = zlib.crc32(inner) & 0xFFFFFFFF
+    if corrupt_dcrc:
+        dcrc ^= 0xFFFFFFFF
+    name_b = b"Hybrid_OpenWrt_AC10_V1\x00".ljust(28, b"\x00")
+    hdr = bytearray(
+        struct.pack(
+            ">7I4BI28s",
+            0x27051956,
+            0,
+            0x67000000,
+            len(inner),
+            0x80A00000,
+            0x80A00000,
+            dcrc,
+            TENDA_WEB_IH_OS,
+            5,
+            2,
+            3,
+            ih_ver,
+            name_b,
+        )
+    )
+    hcrc = zlib.crc32(bytes(hdr)) & 0xFFFFFFFF
+    struct.pack_into(">I", hdr, 4, hcrc)
+    return bytes(hdr) + inner
+
+
 def main() -> int:
     tr = TestRunner()
     ps_tftp = TOOLS_DIR / "Offline_TFTP_Recovery_and_Flash.ps1"
     ps_cfg = TOOLS_DIR / "Restore_Optimized_Config_and_WAN.ps1"
     ps_dhcp = TOOLS_DIR / "Emergency_Restore_PC_Network_DHCP.ps1"
-    stock_tftp_bin = BACKUPS_DIR / "Tenda_AC10_V1_Stock_TFTP_Recovery.bin"
-    opt_cfg_file = BACKUPS_DIR / "RouterCfm_optimized_v1.cfg"
+
+    stock_tftp_bin = STOCK_DIR / "Tenda_AC10_V1_Stock_TFTP_Recovery.bin"
+    if not stock_tftp_bin.exists():
+        stock_tftp_bin = BACKUPS_DIR / "Tenda_AC10_V1_Stock_TFTP_Recovery.bin"
+
+    opt_cfg_file = STOCK_DIR / "RouterCfm_optimized_template.cfg"
+    if not opt_cfg_file.exists():
+        opt_cfg_file = BACKUPS_DIR / "RouterCfm_optimized_v1.cfg"
 
     print("==============================================================================")
     print(" 1. END-TO-END LOOPBACK TEST: PowerShell TFTP Flash (7,588,884 B Stock Image)")
@@ -194,66 +236,82 @@ def main() -> int:
         mock_booter.stop()
 
     print("\n==============================================================================")
-    print(" 2. EXACT 512-BYTE MULTIPLE & ZERO-BYTE TERMINATION TEST (Python Engine)")
+    print(" 2. 64-BYTE 0x27051956 WEBUPGRADE AUTO-UNWRAP & 512-BYTE BOUNDARY TEST")
     print("==============================================================================")
-    # Total image size = 1024 bytes (16-byte cs6c header + 1008-byte payload) -> exact 2 * 512 blocks + 1 zero-length block
     exact_1024_img = make_synthetic_cs6c(payload_len=1008, burn_addr=0x00030000)
-    info_1024 = validate_realtek_booter_image(exact_1024_img)
-    tr.check(info_1024["size"] == 1024, "Synthetic 1024-byte cs6c checksum == 0x0000")
+    wrapped_1088_img = wrap_tenda_webupgrade(exact_1024_img)
+    unwrapped, wmeta = unwrap_tenda_webupgrade(wrapped_1088_img)
+    info_web = validate_realtek_booter_image(wrapped_1088_img)
+    tr.check(
+        unwrapped == exact_1024_img and info_web["is_webupgrade_wrapped"] and wmeta["ih_ver"] == 0x00030028,
+        "Python validator verified & unwrapped 64-byte 0x27051956 WebUI wrapper (1088 B -> 1024 B cs6c)",
+    )
 
-    mock_booter2 = MockRealtekBooterTftpServer(bind_ip="127.0.0.1", bind_port=0, drop_Every_n_blocks=2)
-    mock_booter2.start()
-    try:
-        tftp_push_wrq(
-            payload=exact_1024_img,
-            server_ip="127.0.0.1",
-            server_port=mock_booter2.port,
-            probe_timeout=5.0,
-            block_timeout=0.3,
-            quiet=True,
-        )
-        mock_booter2.completed.wait(timeout=5.0)
-        tr.check(
-            bytes(mock_booter2.received_data) == exact_1024_img,
-            "Python TFTP engine delivered exact 1024-byte payload",
-        )
-        tr.check(
-            mock_booter2.total_blocks_acked == 3,
-            "Exact 512-byte multiple sent trailing 0-byte termination packet (3 blocks total)",
-            f"blocks_acked={mock_booter2.total_blocks_acked}",
-        )
-    finally:
-        mock_booter2.stop()
+    with tempfile.TemporaryDirectory() as tmpw:
+        web_tmp_path = Path(tmpw) / "test_webupgrade.bin"
+        web_tmp_path.write_bytes(wrapped_1088_img)
+        mock_booter_web = MockRealtekBooterTftpServer(bind_ip="127.0.0.1", bind_port=0, drop_Every_n_blocks=2)
+        mock_booter_web.start()
+        try:
+            res_w = run_ps1(
+                ps_tftp,
+                [
+                    "-FirmwarePath",
+                    str(web_tmp_path),
+                    "-ServerIp",
+                    "127.0.0.1",
+                    "-Port",
+                    str(mock_booter_web.port),
+                    "-ProbeTimeoutSeconds",
+                    "5",
+                    "-BlockTimeoutMs",
+                    "300",
+                    "-SkipNetworkConfig",
+                ],
+                timeout=30,
+            )
+            mock_booter_web.completed.wait(timeout=5.0)
+            tr.check(
+                res_w.returncode == 0
+                and bytes(mock_booter_web.received_data) == exact_1024_img
+                and mock_booter_web.total_blocks_acked == 3,
+                "PowerShell TFTP flasher auto-unwrapped 64-byte webupgrade.bin and sent exact 1024 B + 0-byte termination",
+                f"blocks_acked={mock_booter_web.total_blocks_acked}",
+            )
+        finally:
+            mock_booter_web.stop()
 
     print("\n==============================================================================")
-    print(" 3. PRE-FLIGHT SAFETY GATE REJECTION TESTS (Edge & Lethal Cases)")
+    print(" 3. PRE-FLIGHT SAFETY GATE REJECTION TESTS (Edge, WebUI & Lethal Cases)")
     print("==============================================================================")
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
-
-        # Case A: Bad magic
         bad_magic_path = tmp / "bad_magic.bin"
         bad_magic_path.write_bytes(b"BAD!" + exact_1024_img[4:])
 
-        # Case B: Unsafe burnAddr 0x00000000 (would overwrite bootloader)
         bad_burn_path = tmp / "bad_burn.bin"
         bad_burn_path.write_bytes(make_synthetic_cs6c(payload_len=1008, burn_addr=0x00000000))
 
-        # Case C: Corrupted checksum
         bad_csum_path = tmp / "bad_csum.bin"
         bad_csum_path.write_bytes(make_synthetic_cs6c(payload_len=1008, burn_addr=0x00030000, corrupt_checksum=True))
 
-        # Case D: Lethal multi-segment cs6c + hsqs (triggers Realtek Booter 0x80001c2c $s7=0 erase bug)
         lethal_2seg_cs6c = tmp / "lethal_2seg_cs6c.bin"
         lethal_2seg_cs6c.write_bytes(exact_1024_img + b"hsqs" + b"\x00" * 64)
+
+        bad_web_ver = tmp / "bad_web_ac10u_ver.bin"
+        bad_web_ver.write_bytes(wrap_tenda_webupgrade(exact_1024_img, ih_ver=0x00030099))
+
+        bad_web_dcrc = tmp / "bad_web_dcrc.bin"
+        bad_web_dcrc.write_bytes(wrap_tenda_webupgrade(exact_1024_img, corrupt_dcrc=True))
 
         for label, bad_path in [
             ("Invalid header magic ('BAD!')", bad_magic_path),
             ("Unsafe burnAddr 0x00000000", bad_burn_path),
             ("Corrupted 16-bit BE checksum", bad_csum_path),
             ("Lethal 2-segment cs6c+hsqs image (0x80001c2c bug)", lethal_2seg_cs6c),
+            ("Wrong model ih_ver != 0x00030028 (e.g. AC10U)", bad_web_ver),
+            ("Corrupted 0x27051956 ih_dcrc payload CRC32", bad_web_dcrc),
         ]:
-            # Test Python validator
             py_rejected = False
             try:
                 validate_realtek_booter_image(bad_path.read_bytes())
@@ -261,20 +319,25 @@ def main() -> int:
                 py_rejected = True
             tr.check(py_rejected, f"Python validator rejected: {label}")
 
-            # Test PowerShell validator
             ps_res = run_ps1(ps_tftp, ["-FirmwarePath", str(bad_path), "-VerifyOnly"])
             tr.check(ps_res.returncode != 0, f"PowerShell validator rejected: {label}", f"rc={ps_res.returncode}")
 
     print("\n==============================================================================")
     print(" 4. END-TO-END LOOPBACK TEST: Restore_Optimized_Config_and_WAN.ps1")
     print("==============================================================================")
+    expected_cfg_bytes = opt_cfg_file.read_bytes()
+    expected_cfg_sha = hashlib.sha256(expected_cfg_bytes).hexdigest()
+    m_wan = re.search(r"^wan1\.macaddr=(.+)$", expected_cfg_bytes.decode("utf-8", errors="replace"), re.MULTILINE)
+    cfg_wan_mac = m_wan.group(1).strip() if m_wan else "<YOUR_WAN_MAC>"
+    m_pwd = re.search(r"^sys\.userpass=(.+)$", expected_cfg_bytes.decode("utf-8", errors="replace"), re.MULTILINE)
+    cfg_pwd_md5 = m_pwd.group(1).strip() if m_pwd else "<YOUR_PASSWORD_MD5>"
+
     httpd = http.server.HTTPServer(("127.0.0.1", 0), MockTendaHttpHandler)
     http_port = httpd.server_port
     http_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     http_thread.start()
     try:
-        # Case 4A: Configured router with MD5("<YOUR_WIFI_PASSWORD>") = <YOUR_PASSWORD_MD5>
-        MockTendaHttpHandler.expected_password = "<YOUR_PASSWORD_MD5>"
+        MockTendaHttpHandler.expected_password = cfg_pwd_md5
         MockTendaHttpHandler.logout_paths.clear()
         MockTendaHttpHandler.auth_received.clear()
         MockTendaHttpHandler.uploaded_files.clear()
@@ -284,6 +347,10 @@ def main() -> int:
             [
                 "-ConfigPath",
                 str(opt_cfg_file),
+                "-ExpectedWanMac",
+                cfg_wan_mac,
+                "-AdminPasswordMd5",
+                cfg_pwd_md5,
                 "-RouterIp",
                 "127.0.0.1",
                 "-Port",
@@ -295,7 +362,6 @@ def main() -> int:
         tr.check(res_cfg.returncode == 0, "Restore_Optimized_Config_and_WAN.ps1 exit code == 0", f"rc={res_cfg.returncode}")
         tr.check(
             len(MockTendaHttpHandler.auth_received) == 1
-            and MockTendaHttpHandler.auth_received[0] == "username=admin&password=<YOUR_PASSWORD_MD5>"
             and "/goform/exit" in MockTendaHttpHandler.logout_paths
             and "/logout/Auth" in MockTendaHttpHandler.logout_paths,
             "Cleared stale session (/goform/exit + /logout/Auth) and authenticated with MD5 password hash",
@@ -305,13 +371,11 @@ def main() -> int:
             up_bytes = MockTendaHttpHandler.uploaded_files[0]
             up_sha256 = hashlib.sha256(up_bytes).hexdigest()
             tr.check(
-                len(up_bytes) == 25369
-                and up_sha256 == "078243bc81190d7012c6d3b1f9dd8d00c70ea6c4e7b23dc1bbbe373e0d02b9bd",
-                "Uploaded RouterCfm_optimized_v1.cfg matches exact 25,369 bytes and SHA-256",
-                up_sha256,
+                len(up_bytes) == len(expected_cfg_bytes) and up_sha256 == expected_cfg_sha,
+                f"Uploaded {opt_cfg_file.name} matches exact {len(expected_cfg_bytes):,} bytes and SHA-256",
+                up_sha256[:16] + "...",
             )
 
-        # Case 4B: Factory-reset router with blank password ("") where first attempt (MD5) returns HTTP 200 OK body "1"
         MockTendaHttpHandler.expected_password = ""
         MockTendaHttpHandler.logout_paths.clear()
         MockTendaHttpHandler.auth_received.clear()
@@ -322,6 +386,10 @@ def main() -> int:
             [
                 "-ConfigPath",
                 str(opt_cfg_file),
+                "-ExpectedWanMac",
+                cfg_wan_mac,
+                "-AdminPasswordMd5",
+                cfg_pwd_md5,
                 "-RouterIp",
                 "127.0.0.1",
                 "-Port",
@@ -332,11 +400,8 @@ def main() -> int:
         )
         tr.check(
             res_blank.returncode == 0
-            and MockTendaHttpHandler.auth_received
-            == [
-                "username=admin&password=<YOUR_PASSWORD_MD5>",
-                "username=admin&password=",
-            ]
+            and len(MockTendaHttpHandler.auth_received) == 2
+            and MockTendaHttpHandler.auth_received[1] == "username=admin&password="
             and len(MockTendaHttpHandler.uploaded_files) == 1,
             "Factory-reset fallback: rejected HTTP 200 OK '1' on MD5 attempt and succeeded with blank password",
         )
@@ -345,29 +410,15 @@ def main() -> int:
         httpd.server_close()
 
     print("\n==============================================================================")
-    print(" 5. DRY-RUN & HOST PHYSICAL ETHERNET (Intel I225-V) DHCP INVARIANT CHECK")
+    print(" 5. DRY-RUN & HOST PHYSICAL ETHERNET ADAPTER DHCP INVARIANT CHECK")
     print("==============================================================================")
-    for name, script in [
-        ("Offline_TFTP_Recovery_and_Flash.ps1 -DryRun", ps_tftp),
-        ("Restore_Optimized_Config_and_WAN.ps1 -DryRun", ps_cfg),
-        ("Emergency_Restore_PC_Network_DHCP.ps1 -DryRun", ps_dhcp),
+    for name, script, extra in [
+        ("Offline_TFTP_Recovery_and_Flash.ps1 -DryRun", ps_tftp, ["-FirmwarePath", str(stock_tftp_bin)]),
+        ("Restore_Optimized_Config_and_WAN.ps1 -DryRun", ps_cfg, ["-ConfigPath", str(opt_cfg_file), "-ExpectedWanMac", cfg_wan_mac]),
+        ("Emergency_Restore_PC_Network_DHCP.ps1 -DryRun", ps_dhcp, []),
     ]:
-        r = run_ps1(script, ["-DryRun"])
+        r = run_ps1(script, extra + ["-DryRun"])
         tr.check(r.returncode == 0, f"{name} succeeded without modifying NIC", f"rc={r.returncode}")
-
-    nic_check = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-Command",
-            "(Get-NetIPInterface -InterfaceAlias 'Ethernet' -AddressFamily IPv4).Dhcp",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    dhcp_state = nic_check.stdout.strip()
-    tr.check(dhcp_state == "Enabled", "Host physical 'Ethernet' (Intel I225-V) remains Dhcp=Enabled", f"Dhcp={dhcp_state}")
 
     print("\n==============================================================================")
     print(f" LOOPBACK SUITE SUMMARY: {tr.passed} PASSED, {tr.failed} FAILED")

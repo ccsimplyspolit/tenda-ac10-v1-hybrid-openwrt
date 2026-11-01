@@ -38,7 +38,7 @@ We have specifically engineered the exact synthesis:
 **100% Completed, Verified, and Cryptographically Validated.**
 
 1. **Master Backups & Physical Partitions**:
-   - The complete 8,388,608-byte SPI NOR flash dump (`Tenda_AC10_V1_FullFlash_8MB.bin`, SHA-256: `af40888b2a92539ef51218a7ed6dc25c48ac2cd51950ffcf25bec44b98252833`) was forensically analyzed and carved into 8 independent partition slices in `K:\aoe4_dlc\.agents\teamwork\master_backups\`.
+   - The complete 8,388,608-byte SPI NOR flash dump (`Tenda_AC10_V1_FullFlash_8MB.bin`, SHA-256: `af40888b2a92539ef51218a7ed6dc25c48ac2cd51950ffcf25bec44b98252833`) was forensically analyzed and carved into 8 independent partition slices in `backups/`.
    - All 12 files verified with deterministic SHA-256 digests and IEEE 802.3 CRC32 checksums via `verify_master_backups.py` with **12/12 PASS (0 failures)**.
 2. **Binary Reverse Engineering (IDA / Capstone / REA)**:
    - *Physical eFuse Emptiness*: Verified at `0x803725a0` in `halmac_parse_efuse_data_88xx` (bytes 0..3 are `0xFF`, aborts with error 5 `HALMAC_RET_EFUSE_NOT_ENOUGH`).
@@ -203,7 +203,7 @@ Because the physical eFuse is blank (`0xFF`), calibration is read from Flash `mt
 - **2.4 GHz & 5 GHz Power Tables**:
   Full 196-byte hex strings `pwrlevel5GHT40_1S_A` and `pwrlevel5GHT40_1S_B` plus 80 MHz power difference tables `pwrdiff_5G_80BW1S_160BW1S_A/B` and `pwrdiff_5G_80BW2S_160BW2S_A/B` ensure compliant, maximized output power across all 5 GHz channels (36..165), alongside 2.4 GHz CCK/HT40 tables (`pwrdiffHT20`, `pwrdiffOFDM`, `pwrdiffHT40_2S="$DIFF_2G_HT40_2S"`).
 - **Little-Endian Magic Verification**:
-  Validates partition header against `0xDEED2A7D` (`deed2a7d` / `7d2aedde` in 32-bit LE format).
+  Validates partition header against per-unit `uint32_le(CRC32(mtd1[8:65536]))` (e.g. `0x57D39510` / LE `10 95 D3 57` on the sanitized sample).
 
 ---
 
@@ -253,16 +253,16 @@ The firmware image must be built with a Realtek **`cs6c`** header:
 The four production-grade engineering deliverables have been authored, verified, and placed in the project repository:
 
 1. **Device Tree Source (`tenda-ac10-v1.dts`)**:
-   - Location: `K:\aoe4_dlc\.agents\teamwork\worker_unification_synthesizer\tenda-ac10-v1.dts`
+   - Location: `./tenda-ac10-v1.dts`
    - Incorporates: Remediated self-contained node topology with `soc: soc@18000000` declared directly within the root `/ {` node (eliminating dangling `&soc` external labels and enabling standalone compilation with standard `dtc`), exact MIPS 24KEc clocking, 64 MB DDR2 memory node, SPI NOR partition table matching 0x0/0x20000/0x30000/0x7E0000, RTL8367 switch node with GPIO 18 (MDC), GPIO 19 (MDIO), GPIO 58 (RST), Port 6 CPU RGMII (`realtek,extif1`), Port 3 WAN / Ports 2, 1, 0 LAN1..3, Hardware NAT node with `realtek,router-mode`, and PCIe Root Complex with RTL8822BE Skyworth RFE 6 FEM regulator bindings.
 2. **Kernel 4.14 Configuration Diff (`kernel-4.14.config.diff`)**:
-   - Location: `K:\aoe4_dlc\.agents\teamwork\worker_unification_synthesizer\kernel-4.14.config.diff`
+   - Location: `./kernel-4.14.config.diff`
    - Incorporates: Enabling `CONFIG_RTL_HARDWARE_NAT=y`, `CONFIG_PORT0_ROUTER_MODE=y`, `CONFIG_RTL_HWNAT_HOST_BYTE_ORDER=y`, `CONFIG_RTL8192CD=y`, `CONFIG_WLAN_HAL_8822BE=y`, `CONFIG_SLOT_0_RFE_TYPE_6=y`, enabling `CONFIG_PACKAGE_wireless-tools=y` (providing the essential `iwpriv` binary for runtime MIB injection), deselecting all `mac80211`/`rtw88` packages (-1.1 MB flash, -8.2 MB RAM), and adding LuCI, WireGuard, and `cs6c` image packaging.
 3. **Out-of-Band Calibration Script (`set-mib.sh`)**:
-   - Location: `K:\aoe4_dlc\.agents\teamwork\worker_unification_synthesizer\set-mib.sh`
+   - Location: `./set-mib.sh`
    - Incorporates: Dynamic partition resolution (`calibration` / `/dev/mtdblock1`), POSIX `tr` ASCII key parser (no external `strings` dependency), base Ethernet MAC configuration (`HW_NIC0_ADDR` applied to `eth0`), dynamic regulatory domain extraction (`regdomain`), crystal frequency tuning (`xcap=27` / `xcap=46`), thermal baseline (`ther=25` / `ther=32`), Skyworth RFE Type 6 PA/LNA activation, and 196-channel power tables (`pwrlevel5GHT40_1S_A/B`, `pwrdiff_5G_80BW1S_160BW1S_A/B`, `pwrdiff_5G_80BW2S_160BW2S_A/B`, `pwrdiffHT20`, `pwrdiffOFDM`, `pwrdiffHT40_2S`) for 866.7 Mbps line-rate operation.
 4. **TFTP Flashing & Recovery Guide (`tftp_flashing_guide.md`)**:
-   - Location: `K:\aoe4_dlc\.agents\teamwork\worker_unification_synthesizer\tftp_flashing_guide.md`
+   - Location: `./tftp_flashing_guide.md`
    - Incorporates: Hardware bootloader environment, PC static IP setup (`192.168.1.8`), RST button recovery sequence (12-15s hold), Windows and Python TFTP upload scripts, emergency UART serial commands, and full stock restoration procedures using `master_backups/mtd0_fullflash.bin` via SPI programmer or TFTP.
 
 ---

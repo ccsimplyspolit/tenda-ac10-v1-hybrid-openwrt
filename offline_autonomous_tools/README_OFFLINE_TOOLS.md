@@ -1,6 +1,6 @@
 # Tenda AC10 V1.0 — 100% Autonomous Offline Recovery & Verification Suite
 
-All tools in this folder run **100% offline** with **zero external dependencies** (no internet required, no `pip` packages, no Windows optional `tftp.exe` feature required) and enforce a strict `try / finally` network failsafe that **always restores your PC's physical Ethernet adapter (`Intel I225-V`) back to automatic DHCP & DNS**, even if the router takes 20–30 minutes to recover or a script is interrupted with `Ctrl+C`.
+All tools in this folder run **100% offline** with **zero external dependencies** (no internet required, no `pip` packages, no Windows optional `tftp.exe` feature required) and enforce a strict `try / finally` network failsafe that **always restores your PC's physical Ethernet adapter (physical Ethernet NIC) back to automatic DHCP & DNS**, even if the router takes 20–30 minutes to recover or a script is interrupted with `Ctrl+C`.
 
 ---
 
@@ -9,8 +9,9 @@ All tools in this folder run **100% offline** with **zero external dependencies*
 | Launcher | Purpose | Default Target |
 |---|---|---|
 | **`Offline_TFTP_Recovery_and_Flash.bat`** | Flashes stock recovery (`backups\Tenda_AC10_V1_Stock_TFTP_Recovery.bin`, `7,588,884` B) or a custom OpenWrt `cs6c` image to the Realtek Booter at `192.168.1.6:69`. Pre-validates headers, checksums (`0x0000`), and blocks lethal 2-segment `cs6c+hsqs` images before touching the network. | `192.168.1.6:69` (Connect cable to **LAN1 / LAN2 / LAN3**, never WAN) |
+| **`Flash_Hybrid_OpenWrt_4.14_TFTP.bat`** | 1-Click autonomous TFTP flasher for Hybrid OpenWrt 4.14 (`tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin`). Auto-elevates UAC, auto-detects firmware across multiple fallback directories, manages temporary firewall rules, and restores DHCP/DNS in `finally`. | `192.168.1.6:69` (LAN1/LAN2/LAN3) |
 | **`Restore_Optimized_Config_and_WAN.bat`** | Restores `backups\RouterCfm_optimized_v1.cfg` (`25,369` B) to `192.168.0.1`, recovering the ISP-bound WAN MAC (`<YOUR_WAN_MAC>`), disabling phantom `br2`/`vlan3` (`iptv.stb.enable=0`), disabling `ucloud_v2`, setting `sys.maxconn=8192`, and setting `sys.timentpserver=time.google.com`. | `http://192.168.0.1` |
-| **`Emergency_Restore_PC_Network_DHCP.bat`** | Instant 3-second emergency failsafe that removes any static IP (`192.168.1.116` / `192.168.0.116`) and restores automatic DHCP and DNS on `Ethernet` (`Intel I225-V`). | Local PC Adapter (`Ethernet`) |
+| **`Emergency_Restore_PC_Network_DHCP.bat`** | Instant 3-second emergency failsafe that removes any static IP (`192.168.1.116` / `192.168.0.116`) and restores automatic DHCP and DNS on `Ethernet` (physical Ethernet NIC). | Local PC Adapter (`Ethernet`) |
 | **`Verify_All_Dumps_Chips_and_Backups.bat`** | Runs 81 cryptographic and structural checks across all flash dumps, bootloader/kernel headers, RF calibration (`xcap=27/46`, `RFE=6`), `vmlinux_stock.bin` `mib_table` keys, NVRAM configs, and backup archives. | Offline local files |
 
 ---

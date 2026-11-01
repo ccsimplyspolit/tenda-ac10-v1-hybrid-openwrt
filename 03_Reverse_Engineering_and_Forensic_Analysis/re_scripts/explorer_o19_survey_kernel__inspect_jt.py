@@ -1,10 +1,9 @@
 import struct
 
-KERNEL_BIN = r"/workspace/analysis\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin"
+from explorer_driver_hwnat_re__re_disasm import load_kernel_bytes as _load_vmlinux_stock
 
 def main():
-    with open(KERNEL_BIN, "rb") as f:
-        data = f.read()
+            data = _load_vmlinux_stock()
 
     # String at 0x80544060
     s_off = 0x80544060 - 0x80000000

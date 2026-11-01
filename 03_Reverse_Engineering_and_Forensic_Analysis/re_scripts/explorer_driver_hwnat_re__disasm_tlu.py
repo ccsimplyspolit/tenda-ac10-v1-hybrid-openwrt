@@ -1,7 +1,8 @@
+import os
 import sys
-sys.path.insert(0, r"K:\aoe4_dlc\.agents\teamwork\explorer_driver_hwnat_re")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import capstone
-from re_disasm import load_environment, resolve_symbol
+from explorer_driver_hwnat_re__re_disasm import load_environment, resolve_symbol
 
 data, symbols, sym_list = load_environment()
 md = capstone.Cs(capstone.CS_ARCH_MIPS, capstone.CS_MODE_MIPS32 + capstone.CS_MODE_LITTLE_ENDIAN)

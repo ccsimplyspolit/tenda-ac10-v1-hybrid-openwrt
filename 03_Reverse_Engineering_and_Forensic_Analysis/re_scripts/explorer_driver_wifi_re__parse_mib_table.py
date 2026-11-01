@@ -1,5 +1,5 @@
 import sys
-import re_tool
+import explorer_driver_wifi_re__re_tool as re_tool
 
 base_va = 0x805f96bc
 total_entries = 0x20c

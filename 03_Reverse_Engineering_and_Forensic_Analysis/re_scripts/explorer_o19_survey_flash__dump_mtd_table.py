@@ -1,9 +1,8 @@
 import struct
 
-FLASH_PATH = r"/workspace/analysis\21647d8e-3d9c-493f-900f-f13429d32667\scratch\vmlinux_stock.bin"
+from explorer_driver_hwnat_re__re_disasm import load_kernel_bytes as _load_vmlinux_stock
 
-with open(FLASH_PATH, "rb") as f:
-    kdata = f.read()
+    kdata = _load_vmlinux_stock()
 
 base_addr = 0x80000000
 table_offset = 0x005A2658 - 32 # let's check if there is an ALL partition right before Bootloader

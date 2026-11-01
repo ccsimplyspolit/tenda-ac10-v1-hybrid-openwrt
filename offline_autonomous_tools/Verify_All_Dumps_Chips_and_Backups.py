@@ -26,6 +26,7 @@ import hashlib
 import json
 import lzma
 import os
+import re
 import struct
 import sys
 import zipfile
@@ -195,16 +196,30 @@ def run_all_checks() -> int:
         f"mtd1 Factory Calibration IEEE CRC32 == 0x{cal_crc:08X} (seq={cal_seq}) verified",
     )
     cal_json = json.loads(zf.read("01_Partitions/mtd1_factory_rf_cal_40keys.json").decode("utf-8"))
+    mtd1_nic0_m = re.search(rb"HW_NIC0_ADDR=([0-9A-Fa-f]{12})", mtd1_cal)
+    mtd1_wlan0_m = re.search(rb"HW_WLAN0_WLAN_ADDR=([0-9A-Fa-f]{12})", mtd1_cal)
+    mtd1_wlan1_m = re.search(rb"HW_WLAN1_WLAN_ADDR=([0-9A-Fa-f]{12})", mtd1_cal)
+    sheet_text = zf.read("02_Configs_and_WAN/ISP_WAN_and_MAC_Recovery_Sheet.txt").decode("ascii", errors="replace")
+    sheet_nic0_m = re.search(r"HW_NIC0_ADDR=([0-9A-Fa-f]{12})", sheet_text)
+
+    dyn_nic0 = (sheet_nic0_m.group(1).upper() if sheet_nic0_m else (mtd1_nic0_m.group(1).decode("ascii").upper() if mtd1_nic0_m else ""))
+    dyn_wlan0 = mtd1_wlan0_m.group(1).decode("ascii").upper() if mtd1_wlan0_m else ""
+    dyn_wlan1 = mtd1_wlan1_m.group(1).decode("ascii").upper() if mtd1_wlan1_m else ""
+
+    cal_nic0 = cal_json.get("HW_NIC0_ADDR", "").upper()
+    cal_wlan0 = cal_json.get("HW_WLAN0_WLAN_ADDR", "").upper()
+    cal_wlan1 = cal_json.get("HW_WLAN1_WLAN_ADDR", "").upper()
+
     check(
         len(cal_json) == 40
-        and cal_json.get("HW_NIC0_ADDR") == "500FF5000000"
-        and cal_json.get("HW_WLAN0_WLAN_ADDR") == "500FF5000005"
-        and cal_json.get("HW_WLAN1_WLAN_ADDR") == "500FF5000001"
+        and bool(dyn_nic0 and cal_nic0 == dyn_nic0)
+        and bool(dyn_wlan0 and cal_wlan0 == dyn_wlan0)
+        and bool(dyn_wlan1 and cal_wlan1 == dyn_wlan1)
         and cal_json.get("HW_WLAN0_11N_XCAP") == "27"
         and cal_json.get("HW_WLAN0_11N_THER") == "25"
         and cal_json.get("HW_WLAN1_11N_XCAP") == "46"
         and cal_json.get("HW_WLAN1_11N_THER") == "32",
-        "mtd1 40 factory RF calibration keys match MACs (50:0F:F5:00:00:00/35/31), 5G XCAP=27/THER=25, 2.4G XCAP=46/THER=32",
+        "mtd1 40 factory RF calibration keys match dynamic hardware MACs, 5G XCAP=27/THER=25, 2.4G XCAP=46/THER=32",
     )
 
     cfm1_crc, cfm1_seq = struct.unpack_from("<II", mtd4_cfm1, 0)
@@ -218,19 +233,21 @@ def run_all_checks() -> int:
         f"mtd5 Backup CFM NVRAM IEEE CRC32 == 0x{cfm2_crc:08X} (seq={cfm2_seq})",
     )
 
+    sheet_text = zf.read("02_Configs_and_WAN/ISP_WAN_and_MAC_Recovery_Sheet.txt").decode("ascii", errors="replace")
+    cloned_mac_m = re.search(r"REQUIRED Cloned WAN MAC\s*:\s*([0-9A-Fa-f:]{17})", sheet_text)
+    cloned_mac = cloned_mac_m.group(1) if cloned_mac_m else ""
+
     opt_cfg = zf.read("02_Configs_and_WAN/RouterCfm_optimized_v1.cfg").decode("ascii", errors="replace")
     check(
-        "wan1.macaddr=<YOUR_WAN_MAC>" in opt_cfg
+        bool(cloned_mac and f"wan1.macaddr={cloned_mac}" in opt_cfg)
         and "iptv.enable=0" in opt_cfg
         and "iptv.stb.enable=0" in opt_cfg
         and "igmp.enable=0" in opt_cfg
         and "ucloud.syncserver=0" in opt_cfg
         and "sys.maxconn=8192" in opt_cfg
         and "sys.timentpserver=time.google.com" in opt_cfg,
-        "RouterCfm_optimized_v1.cfg preserves ISP WAN MAC <YOUR_WAN_MAC>, disables br2/vlan3 (stbEn=0) & ucloud, and sets sys.timentpserver=time.google.com",
+        "RouterCfm_optimized_v1.cfg preserves cloned ISP WAN MAC, disables br2/vlan3 (stbEn=0) & ucloud, and sets sys.timentpserver=time.google.com",
     )
-
-    import re
 
     # 6. Verify Hybrid OpenWrt 4.14 Kit Deliverables & Binary mib_table Compliance
     print("\n[6/6] Hybrid OpenWrt 4.14 Kit, Binary mib_table (0x5F96BC..0x5FF8FC) & Silicon Alignment Check")
@@ -367,7 +384,7 @@ def run_all_checks() -> int:
     check(
         tools_sums_ok
         and all(os.path.exists(a) and os.path.exists(b) and open(a, "rb").read() == open(b, "rb").read() for a, b in sync_pairs),
-        "All 5 dual-copy deliverables and all 11 offline_autonomous_tools/SHA256SUMS.txt digests are byte-for-byte verified",
+        "All 5 dual-copy deliverables and all 12 offline_autonomous_tools/SHA256SUMS.txt digests are byte-for-byte verified",
     )
     readme_kit = open(os.path.join(HYBRID_KIT_DIR, "README.md"), "r", encoding="utf-8").read()
     synth_report = open(os.path.join(os.path.dirname(HYBRID_KIT_DIR), ".agents", "teamwork", "unification_synthesis_report.md"), "r", encoding="utf-8").read()

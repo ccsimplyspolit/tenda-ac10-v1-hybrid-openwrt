@@ -1,6 +1,7 @@
+import os
 import sys
-sys.path.insert(0, r"K:\aoe4_dlc\.agents\teamwork\explorer_driver_hwnat_re")
-from re_disasm import load_environment, resolve_symbol
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from explorer_driver_hwnat_re__re_disasm import load_environment, resolve_symbol
 import struct
 import capstone
 

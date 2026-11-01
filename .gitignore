@@ -1,0 +1,36 @@
+# ==============================================================================
+# Git Ignore Configuration for Tenda AC10 V1.0 Public Repository
+# ==============================================================================
+
+# OS & Editor Artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Python Artifacts & Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+env/
+venv/
+
+# Temporary & Build Logs
+*.log
+*.tmp
+*.temp
+*.bak
+*.bin.bak
+*~
+
+# Network & Router Local State Backups
+network_state_backup.json
+*backup*.cfg
+
+# Raw SPI Flash Dumps & Sensitive Recovery Files
+*FullFlash*
+*ISP_WAN*.txt
+private_config*.cfg

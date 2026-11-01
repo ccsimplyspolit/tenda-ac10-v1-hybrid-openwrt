@@ -37,7 +37,13 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $HybridKitRoot = Split-Path -Parent $ScriptDir
 
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
-    $ConfigPath = Join-Path $HybridKitRoot "backups\RouterCfm_optimized_v1.cfg"
+    $CandidateBackupCfg = Join-Path $HybridKitRoot "backups\RouterCfm_optimized_v1.cfg"
+    $CandidateTemplateCfg = Join-Path $HybridKitRoot "01_Stock_Firmware_and_Partitions\RouterCfm_optimized_template.cfg"
+    if (Test-Path -LiteralPath $CandidateBackupCfg) {
+        $ConfigPath = $CandidateBackupCfg
+    } else {
+        $ConfigPath = $CandidateTemplateCfg
+    }
 }
 
 function Write-Step {

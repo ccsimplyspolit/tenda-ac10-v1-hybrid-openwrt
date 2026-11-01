@@ -15,7 +15,7 @@ This forensic investigation audited all flash images, partition dumps, factory c
 All five core mission objectives have been completed with zero errors and mathematical verification:
 1. **Silicon Identity**: The exact chip models, clock frequencies, bus topologies, and peripheral controllers were verified via decompiled bootloader routines, kernel symbols (`kallsyms_stock_31434.txt`), `/proc/wlan0/mib_all`, and `/proc/wlan1/mib_all`.
 2. **Flash Partition Layout**: Verified against the physical SPI NOR flash boundaries (`0x000000` to `0x800000`), resolving the dual numbering convention between physical OpenWrt DTS offsets (`mtd0`–`mtd5`) and stock Realtek driver registration (`mtd0`–`mtd6`).
-3. **Factory RF Calibration Audit**: Identified all 40 ASCII key-value calibration pairs in `mtd1` (64 KB @ `0x020000`), calculated the IEEE 802.3 CRC32 (`0xDEED2A7D`), and determined the root cause of 5 GHz collapse in modern `rtw88` Linux 4.14/6.x kernels (blank physical eFuse on the PCIe RTL8822BE requiring user-space or driver out-of-band injection of XCAP `27`, thermal baseline `25`, and Skyworth RFE Type 6 external FEM registers).
+3. **Factory RF Calibration Audit**: Identified all 40 ASCII key-value calibration pairs in `mtd1` (64 KB @ `0x020000`), calculated the IEEE 802.3 CRC32 (`0x57D39510` (per-unit `CRC32(mtd1[8:65536])`)), and determined the root cause of 5 GHz collapse in modern `rtw88` Linux 4.14/6.x kernels (blank physical eFuse on the PCIe RTL8822BE requiring user-space or driver out-of-band injection of XCAP `27`, thermal baseline `25`, and Skyworth RFE Type 6 external FEM registers).
 4. **Binary & Container Reverse Engineering**: Unpacked the `cr6c` kernel container (discovering the MIPS 24KEc decompression trampoline up to offset `0x2818` and raw LZMA stream unpacking to `7,253,712` bytes matching `vmlinux_stock.bin`), verified the SquashFS 4.0 XZ image with its proprietary 24-byte `Tenda\x00` block headers, and validated dual-bank ping-pong NVRAM wear leveling (`seq=341` vs `seq=340`).
 5. **Cryptographic Hash Cross-Verification**: Verified 100% SHA-256 consistency across `master_backups/`, `Tenda_AC10_V1_Hybrid_Kit/backups/`, `scratch/Tenda_AC10_V1_Backups/`, and `Tenda_AC10_V1_Complete_Backup.zip`.
 
@@ -47,7 +47,7 @@ The 8 MB SPI flash (`8,388,608` bytes) is partitioned into distinct segments. Tw
 | Physical Partition (DTS) | Stock MTD Device | Start Offset | End Offset | Size (Bytes) | Magic / Header | Content Description |
 |---|---|---:|---:|---:|---|---|
 | **mtd0 (bootloader)** | `mtd1` | `0x000000` | `0x020000` | 131,072 (128 KB) | MIPS JUMP / `1F 8B` | Realtek Booter Stage 1 (`0x0000`) + Stage 2 GZIP (`0x7D60`, unpacks to `102,496` B @ `0x80000000`) |
-| **mtd1 (calibration)** | `mtd2` | `0x020000` | `0x030000` | 65,536 (64 KB) | `7D 2A ED DE` | Factory Board Data & RF Calibration (40 ASCII key-value pairs, CRC32 `0xDEED2A7D`, `seq=0`) |
+| **mtd1 (calibration)** | `mtd2` | `0x020000` | `0x030000` | 65,536 (64 KB) | `CRC32` (LE) | Factory Board Data & RF Calibration (40 ASCII key-value pairs, CRC32 `0x57D39510` (per-unit `CRC32(mtd1[8:65536])`), `seq=0`) |
 | **mtd2 (kernel)** | part of `mtd3` | `0x030000` | `0x23BC12` | 2,145,298 (~2.09 MB) | `cr6c` (`63 72 36 63`) | Kernel Container: 16-B header, trampoline to `0x2818`, LZMA payload unpacking to `7,253,712` B |
 | **mtd3 (rootfs)** | `mtd4` | `0x23BC12` | `0x7E0000` | 5,915,630 (5.64 MB) | `hsqs` (`68 73 71 73`) | RootFS SquashFS 4.0 LE (actual used: `5,439,844` B, custom 24-B `Tenda\x00` XZ block headers) |
 | **mtd4 (cfm_primary)** | `mtd5` | `0x7E0000` | `0x7F0000` | 65,536 (64 KB) | CRC32 LE (`0x34E8A155`) | Primary CFM NVRAM Configuration: `seq=341` (`0x00000155`), active runtime bank |
@@ -72,7 +72,7 @@ Each boundary was validated using byte-level slicing on `Tenda_AC10_V1_FullFlash
 ### 4.1. The 40 Factory Calibration Parameters
 
 The calibration partition `mtd1` (`0x020000`) has an 8-byte binary header followed by a newline-delimited ASCII payload terminated by a null byte:
-- **Bytes 0..3**: `0xDEED2A7D` (LE: `7D 2A ED DE`) — IEEE 802.3 CRC32 computed across all bytes from offset 8 to EOF.
+- **Bytes 0..3**: `uint32_le(CRC32(mtd1[8:65536]))` (e.g. `0x57D39510` / LE `10 95 D3 57` on sanitized sample) — IEEE 802.3 CRC32 computed across all bytes from offset 8 to EOF.
 - **Bytes 4..7**: `0x00000000` — Sequence counter (`seq=0`).
 - **Bytes 8..End**: 40 configuration keys parsed by `mtd1_factory_rf_cal_40keys.json`.
 
@@ -88,11 +88,11 @@ Offset 0x0008: HW_WLAN0_TX_POWER_DIFF_5G_40BW2S_20BW2S_A=01010101010101010101010
 1. **Ethernet & Router Identity**:
    - `HW_NIC0_ADDR = 500FF5000000` -> Base LAN / Router MAC address (`br0`, `eth0`)
    - `HW_NIC1_ADDR = 00e04c8196c9` -> Secondary NIC default MAC
-   - `ucloud_serialnum = 6590985` -> Cloud device serial identifier
+   - `ucloud_serialnum = 0000000` -> Cloud device serial identifier
    - `TD_ATE_SN = ` -> Factory test station identifier
 2. **5 GHz Wireless Calibration (`wlan0` / RTL8822BE)**:
    - `HW_WLAN0_WLAN_ADDR = 500FF5000005` -> 5 GHz BSSID MAC
-   - `HW_WLAN0_WSC_PIN = 16588547` -> WPS PIN
+   - `HW_WLAN0_WSC_PIN = 00000000` -> WPS PIN
    - `HW_WLAN0_11N_XCAP = 27` -> 40 MHz Crystal Load Capacitance calibration (reg `0x2C`)
    - `HW_WLAN0_11N_THER = 25` -> Factory thermal sensor calibration reference (reg `0x87C`)
    - `HW_WLAN0_REG_DOMAIN = 13` -> Regulatory domain identifier
@@ -108,7 +108,7 @@ Offset 0x0008: HW_WLAN0_TX_POWER_DIFF_5G_40BW2S_20BW2S_A=01010101010101010101010
    - `TD_WLAN0_WLAN_COUNTRY = US`
 3. **2.4 GHz Wireless Calibration (`wlan1` / RTL8197FS)**:
    - `HW_WLAN1_WLAN_ADDR = 500FF5000001` -> 2.4 GHz BSSID MAC
-   - `HW_WLAN1_WSC_PIN = 16588547` -> WPS PIN
+   - `HW_WLAN1_WSC_PIN = 00000000` -> WPS PIN
    - `HW_WLAN1_11N_XCAP = 46` -> 40 MHz Crystal Load Capacitance calibration
    - `HW_WLAN1_11N_THER = 32` -> Factory thermal sensor calibration reference
    - `HW_WLAN1_REG_DOMAIN = 13` -> Regulatory domain identifier
@@ -195,7 +195,7 @@ A complete cryptographic audit was performed across all three backup directories
 ### 5.2. Cross-Directory Reconciliation & Equivalences
 
 The audit reconciled the cross-directory file equivalences:
-- `K:\aoe4_dlc\.agents\teamwork\master_backups\mtd0_fullflash.bin` ≡ `scratch\Tenda_AC10_V1_FullFlash_8MB.bin` ≡ `00_FullFlash_8MB\Tenda_AC10_V1_FullFlash_8MB.bin` (`af40888b2a92539ef51218a7ed6dc25c48ac2cd51950ffcf25bec44b98252833`)
+- `backups/mtd0_fullflash.bin` ≡ `scratch\Tenda_AC10_V1_FullFlash_8MB.bin` ≡ `00_FullFlash_8MB\Tenda_AC10_V1_FullFlash_8MB.bin` (`af40888b2a92539ef51218a7ed6dc25c48ac2cd51950ffcf25bec44b98252833`)
 - `master_backups\mtd1_bootloader.bin` ≡ `01_Partitions\mtd0_bootloader_0x000000_128KB.bin` (`5f351f3bbcfa3a1b2a5f17bdcdd5191deec5685126bb0a5830f96788d8962036`)
 - `master_backups\mtd2_calibration.bin` ≡ `01_Partitions\mtd1_factory_cfg_rf_cal_0x020000_64KB.bin` (`2b0224aff5c250bf10c25d94c38a638496543cc2af1287a692c58855e269aba7`)
 - `master_backups\mtd3_kernelfs.bin` ≡ `01_Partitions\mtd2_kernelfs_0x030000_7872KB.bin` (`4679fa4673696318288896d6518515db7c0db4e5defb88d8bfe552bc98181c45`)
@@ -221,10 +221,10 @@ The verified backups ensure recovery capability under all failure modes without 
    - Recovery asset: `01_Partitions/mtd2_kernelfs_0x030000_7872KB.bin` (Kernel + RootFS combined) or `kernel_cr6c_0x030000.bin`.
 3. **Factory RF Calibration Restoration**:
    - If `mtd1` is erased, write `01_Partitions/mtd1_factory_cfg_rf_cal_0x020000_64KB.bin` to SPI offset `0x020000`.
-   - Validated checksum `0xDEED2A7D` ensures immediate driver acceptance without RF warning.
+   - Validated checksum `0x57D39510` (per-unit `CRC32(mtd1[8:65536])`) ensures immediate driver acceptance without RF warning.
 4. **Offline NVRAM & ISP WAN Restoration**:
    - If settings are wiped, upload `02_Configs_and_WAN/RouterCfm_optimized_v1.cfg` via `/cgi-bin/UploadCfg` or write `mtd4_cfm_primary_0x7E0000_64KB.bin` to `0x7E0000`.
-   - Restores static WAN IP (`198.51.100.44/24`, GW `198.51.100.1`, DNS `1.1.1.1`, WAN MAC `<YOUR_WAN_MAC>`) with all phantom interfaces (`br2`/`vlan3`) and Chinese cloud demons disabled.
+   - Restores static WAN IP (`198.51.100.10/24`, GW `198.51.100.1`, DNS `1.1.1.1`, WAN MAC `<YOUR_WAN_MAC>`) with all phantom interfaces (`br2`/`vlan3`) and Chinese cloud demons disabled.
 
 ---
 

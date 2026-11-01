@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Emergency Standalone PC Network Adapter DHCP & DNS Restorer (Intel I225-V / Ethernet)
+    Emergency Standalone PC Network Adapter DHCP & DNS Restorer (Physical Ethernet Adapter)
 
 .DESCRIPTION
     Immediately restores the physical Ethernet adapter to automatic DHCP and DNS.
@@ -29,7 +29,7 @@ $nic = Get-NetAdapter -Name $InterfaceAlias -ErrorAction SilentlyContinue
 if (-not $nic) {
     $nic = Get-NetAdapter | Where-Object {
         $_.InterfaceDescription -notmatch 'Virtual|VPN|Fortinet|Bluetooth|TAP|Hyper-V|Loopback' -and
-        $_.InterfaceDescription -match 'Intel|Realtek|Ethernet|I225|PCIe|GbE'
+        $_.InterfaceDescription -match 'Intel|Realtek|Ethernet|PCIe|GbE'
     } | Select-Object -First 1
     if ($nic) { $InterfaceAlias = $nic.Name }
 }

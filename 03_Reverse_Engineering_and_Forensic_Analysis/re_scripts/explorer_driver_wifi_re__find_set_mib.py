@@ -1,5 +1,5 @@
 import sys
-import re_tool
+import explorer_driver_wifi_re__re_tool as re_tool
 
 target = 0x80316914
 target_bytes = target.to_bytes(4, 'little')

@@ -13,11 +13,15 @@ import struct
 import sys
 import threading
 import time
+import zlib
 from typing import Dict, Optional, Tuple
 
 MAX_FIRMWARE_PARTITION_SIZE = 0x7E0000 - 0x030000  # 8,060,928 bytes (7,872 KB)
 EXPECTED_LOAD_ADDR = 0x80A00000
 EXPECTED_BURN_ADDR = 0x00030000
+TENDA_WEB_MAGIC = b"\x27\x05\x19\x56"
+TENDA_WEB_IH_OS = 2
+TENDA_WEB_IH_VER = 0x00030028
 
 
 def sum16_be(data: bytes) -> int:
@@ -29,12 +33,73 @@ def sum16_be(data: bytes) -> int:
     return sum(struct.unpack(f">{len(data) // 2}H", data)) & 0xFFFF
 
 
+def unwrap_tenda_webupgrade(raw: bytes) -> Tuple[bytes, Optional[Dict[str, object]]]:
+    """
+    Validate and unwrap 64-byte Tenda AC10 V1.0 WebUI U-Boot wrapper (0x27051956),
+    emulating libcommon.so check_fw_type @ 0x10AFC, check_mtd_size @ 0x11CFC,
+    check_fw_crc @ 0x11894, and check_fw_valid @ 0x122F4 (plus Realtek Booter
+    AutoBurn 0x40-byte skip @ 0x80001B84).
+    If raw does not start with 0x27051956, returns (raw, None).
+    """
+    if len(raw) < 4 or raw[:4] != TENDA_WEB_MAGIC:
+        return raw, None
+    if len(raw) < 96:
+        raise ValueError(f"Tenda 0x27051956 WebUI image too small ({len(raw)} bytes < 96).")
+    if len(raw) >= MAX_FIRMWARE_PARTITION_SIZE:
+        raise ValueError(
+            f"Tenda 0x27051956 WebUI image ({len(raw):,} B) violates check_mtd_size (< {MAX_FIRMWARE_PARTITION_SIZE:,} B)!"
+        )
+    ih_magic, ih_hcrc, ih_time, ih_size, ih_load, ih_ep, ih_dcrc = struct.unpack_from(">7I", raw, 0)
+    ih_os = raw[0x20] if raw[0x20] == TENDA_WEB_IH_OS else raw[28]
+    (ver_0x24,) = struct.unpack_from(">I", raw, 0x24)
+    (ver_0x20,) = struct.unpack_from(">I", raw, 0x20)
+    ih_ver = ver_0x24 if ver_0x24 == TENDA_WEB_IH_VER else ver_0x20
+    ih_name = (
+        raw[40:64].split(b"\x00", 1)[0].decode("ascii", errors="replace")
+        if ver_0x24 == TENDA_WEB_IH_VER
+        else raw[36:64].split(b"\x00", 1)[0].decode("ascii", errors="replace")
+    )
+
+    hdr_zeroed = bytearray(raw[:64])
+    hdr_zeroed[4:8] = b"\x00\x00\x00\x00"
+    calc_hcrc = zlib.crc32(bytes(hdr_zeroed)) & 0xFFFFFFFF
+    if ih_hcrc != 0 and ih_hcrc != calc_hcrc:
+        raise ValueError(f"Tenda 0x27051956 ih_hcrc mismatch: 0x{ih_hcrc:08X} != 0x{calc_hcrc:08X}")
+    inner = raw[64:]
+    if ih_size != len(inner):
+        raise ValueError(f"Tenda 0x27051956 ih_size mismatch: header={ih_size}, actual={len(inner)}")
+    calc_dcrc = zlib.crc32(inner) & 0xFFFFFFFF
+    if ih_dcrc != calc_dcrc:
+        raise ValueError(f"Tenda 0x27051956 ih_dcrc mismatch: 0x{ih_dcrc:08X} != 0x{calc_dcrc:08X}")
+    if ih_os != TENDA_WEB_IH_OS:
+        raise ValueError(f"Tenda 0x27051956 ih_os={ih_os} rejected by check_fw_valid (expected {TENDA_WEB_IH_OS} = Linux)")
+    if ih_ver != TENDA_WEB_IH_VER:
+        raise ValueError(
+            f"Tenda 0x27051956 ih_ver=0x{ih_ver:08X} rejected by check_fw_valid @ 0x12484 "
+            f"(expected 0x{TENDA_WEB_IH_VER:08X} for Tenda AC10 V1.0)"
+        )
+    meta = {
+        "ih_magic": ih_magic,
+        "ih_hcrc": ih_hcrc,
+        "ih_dcrc": ih_dcrc,
+        "ih_size": ih_size,
+        "ih_os": ih_os,
+        "ih_ver": ih_ver,
+        "ih_name": ih_name,
+        "outer_size": len(raw),
+        "outer_sha256": hashlib.sha256(raw).hexdigest(),
+    }
+    return inner, meta
+
 
 def validate_realtek_booter_image(raw: bytes) -> Dict[str, object]:
     """
-    Bit-exact emulation of Realtek Booter v3.4.11B.9 AutoBurn (0x800019d0) and check_image (0x8000dd10).
+    Bit-exact emulation of Realtek Booter v3.4.11B.9 AutoBurn (0x800019d0) and check_image (0x8000dd10),
+    including 64-byte Tenda 0x27051956 WebUI wrapper validation & unwrap (0x80001b74..0x80001b90).
     Raises ValueError if the image is invalid or dangerous to flash.
     """
+    orig_raw = raw
+    raw, web_meta = unwrap_tenda_webupgrade(raw)
     total_len = len(raw)
     if total_len < 32:
         raise ValueError(f"Image too small ({total_len} bytes).")
@@ -46,7 +111,7 @@ def validate_realtek_booter_image(raw: bytes) -> Dict[str, object]:
 
     magic = raw[:4]
     if magic not in (b"cr6c", b"cs6c"):
-        raise ValueError(f"Invalid header magic {magic!r} (expected b'cr6c' or b'cs6c').")
+        raise ValueError(f"Invalid header magic {magic!r} (expected b'cr6c', b'cs6c', or 0x27051956 WebUI wrapper).")
 
     start_addr, burn_addr, seg1_len = struct.unpack_from(">III", raw, 4)
     if start_addr != EXPECTED_LOAD_ADDR:
@@ -99,15 +164,22 @@ def validate_realtek_booter_image(raw: bytes) -> Dict[str, object]:
             )
         mode = f"Dual-Segment Factory Stock (cr6c + {seg2_magic.decode()})"
 
+    if web_meta is not None:
+        mode = f"Tenda 0x27051956 WebUI Wrapped -> {mode}"
+
     return {
-        "size": total_len,
+        "size": len(orig_raw),
+        "booter_size": total_len,
         "magic": magic.decode("ascii"),
         "mode": mode,
         "start_addr": start_addr,
         "burn_addr": burn_addr,
         "seg1_len": seg1_len,
         "seg2_len": rem_len,
-        "sha256": hashlib.sha256(raw).hexdigest(),
+        "sha256": hashlib.sha256(orig_raw).hexdigest(),
+        "unwrapped_sha256": hashlib.sha256(raw).hexdigest(),
+        "is_webupgrade_wrapped": web_meta is not None,
+        "web_header": web_meta,
     }
 
 

@@ -1,0 +1,123 @@
+# Kernel 4.14 Configuration Diff: Hybrid OpenWrt for Tenda AC10 V1.0
+# Base: OpenWrt 19.07 (target/linux/realtek/rtl8197f)
+# Target Architecture: MIPS32 LE (MIPS 24KEc @ 1000 MHz)
+# Purpose: Enables 895-940 Mbps Hardware NAT ASIC + 866.7 Mbps Monolithic rtl8192cd (RFE Type 6)
+#          Removes mac80211/rtw88 bloat (-1.1 MB flash, -8.2 MB RAM)
+
+--- a/.config	2026-11-01 00:00:00.000000000 +0200
++++ b/.config	2026-11-01 00:00:00.000000000 +0200
+@@ -1,30 +1,120 @@
++#
++# Target System & Hardware Profile
++#
++CONFIG_TARGET_realtek=y
++CONFIG_TARGET_realtek_rtl8197f=y
++CONFIG_TARGET_realtek_rtl8197f_DEVICE_tenda_ac10-v1=y
++CONFIG_TARGET_BOARD="realtek"
++CONFIG_TARGET_SUBTARGET="rtl8197f"
++CONFIG_TARGET_PROFILE="DEVICE_tenda_ac10-v1"
++CONFIG_ARCH="mips"
++CONFIG_MIPS=y
++CONFIG_CPU_MIPS32_R2=y
++CONFIG_SYS_SUPPORTS_LITTLE_ENDIAN=y
++CONFIG_CPU_LITTLE_ENDIAN=y
++
++#
++# Image Format and Flash Bootloader Parameters
++# Realtek Booter v3.4.11B.9 requires cr6c/cs6c header burned at 0x030000
++#
++CONFIG_TARGET_ROOTFS_SQUASHFS=y
++CONFIG_TARGET_SQUASHFS_BLOCK_SIZE=128
++CONFIG_REALTEK_IMAGE_CS6C=y
++CONFIG_REALTEK_LOAD_ADDR="0x80A00000"
++CONFIG_REALTEK_BURN_OFFSET="0x00030000"
++CONFIG_REALTEK_BOOT_TFTP_IP="192.168.1.6"
++
++#
++# Hardware NAT ASIC Acceleration Engine (rtl865x / rtl819x_hwnat.c)
++# Wire-speed 895-940 Mbps routing with 0.0% CPU overhead
++#
++CONFIG_RTL_HARDWARE_NAT=y
++CONFIG_RTL819X_HWNAT=y
++CONFIG_RTL_HW_NAPT=y
++CONFIG_RTL_HW_ROUTING=y
++CONFIG_RTL_HW_MULTICAST=n
++CONFIG_RTL_CPU_TAG=y
++CONFIG_PORT0_ROUTER_MODE=y
++CONFIG_RTL_HWNAT_HOST_BYTE_ORDER=y
++CONFIG_RTL_HWNAT_CONNTRACK_CONFIRM=y
++CONFIG_NETFILTER_ADVANCED=y
++CONFIG_NF_CONNTRACK=y
++CONFIG_NF_NAT=y
++
++#
++# Realtek RTL8367RB Gigabit Switch Subsystem
++# SMI GPIO Bit-Banging: MDC=18, MDIO=19, RST=58, CPU Port=6
++#
++CONFIG_NET_SWITCH=y
++CONFIG_SWCONFIG=y
++CONFIG_SWCONFIG_BRLAN=y
++CONFIG_RTL8367B=y
++CONFIG_RTL8367B_SMI=y
++CONFIG_RTL8367B_GPIO_MDC=18
++CONFIG_RTL8367B_GPIO_MDIO=19
++CONFIG_RTL8367B_GPIO_RESET=58
++CONFIG_RTL8367B_CPU_PORT=6
++CONFIG_RTL8367B_EXT1_RGMII=y
++CONFIG_RTL8367B_EXT1_DELAY=0x02
++
++#
++# Monolithic Realtek Wireless Driver (rtl8192cd)
++# Full 866.7 Mbps 2x2 802.11ac VHT80 + Skyworth RFE Type 6 PA/LNA support
++#
++CONFIG_RTL8192CD=y
++CONFIG_WLAN_HAL=y
++CONFIG_WLAN_HAL_8822BE=y
++CONFIG_SLOT_0_8822BE=y
++CONFIG_SLOT_0_RFE_TYPE_6=y
++CONFIG_WLAN_HAL_8197F=y
++CONFIG_SLOT_1_8197F=y
++CONFIG_SLOT_1_RFE_TYPE_5=y
++CONFIG_RTL8192CD_USE_DIRECT_IO=y
++CONFIG_RTL_WLAN_CHIP_EVALUATION=y
++CONFIG_RTL819X_FLASH_MIB=y
++CONFIG_RTL_WLAN_THERMAL_TRACKING=y
++CONFIG_RTL_WLAN_DYNAMIC_CCA=y
++CONFIG_RTL_WLAN_TX_POWER_TABLE_196CH=y
++
++#
++# REMOVE Mac80211, Rtw88, and Firmware Bloat
++# Yields -1.1 MB flash reduction and -8.2 MB runtime RAM savings
++#
++# CONFIG_PACKAGE_mac80211 is not set
++# CONFIG_PACKAGE_kmod-mac80211 is not set
++# CONFIG_PACKAGE_kmod-cfg80211 is not set
++# CONFIG_PACKAGE_kmod-rtw88 is not set
++# CONFIG_PACKAGE_kmod-rtw88-core is not set
++# CONFIG_PACKAGE_kmod-rtw88-pci is not set
++# CONFIG_PACKAGE_rtw88-firmware is not set
++# CONFIG_PACKAGE_rtl8822be-firmware is not set
++CONFIG_PACKAGE_wireless-tools=y
++
++#
++# OpenWrt System Packages & LuCI UI
++#
++CONFIG_PACKAGE_wireguard=y
++CONFIG_PACKAGE_kmod-wireguard=y
++CONFIG_PACKAGE_luci=y
++CONFIG_PACKAGE_luci-ssl=y
++CONFIG_PACKAGE_luci-app-firewall=y
++CONFIG_PACKAGE_luci-app-wireguard=y
++CONFIG_PACKAGE_dnsmasq=y
++CONFIG_PACKAGE_firewall=y
++CONFIG_PACKAGE_iptables=y
++CONFIG_PACKAGE_ip6tables=y
++CONFIG_PACKAGE_ppp=y
++CONFIG_PACKAGE_ppp-mod-pppoe=y
++CONFIG_PACKAGE_dropbear=y
++CONFIG_PACKAGE_mtd=y
++CONFIG_PACKAGE_opkg=y
++CONFIG_PACKAGE_uclient-fetch=y
++CONFIG_PACKAGE_iwpriv=y
++# CONFIG_KERNEL_CRASHLOG is not set
++# CONFIG_CRASHLOG is not set

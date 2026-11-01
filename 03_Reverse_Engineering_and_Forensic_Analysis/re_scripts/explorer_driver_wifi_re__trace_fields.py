@@ -1,5 +1,5 @@
 import sys
-import re_tool
+import explorer_driver_wifi_re__re_tool as re_tool
 
 offsets = {
     0x2bfc: "priv->xcap",
