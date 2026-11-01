@@ -412,16 +412,25 @@ class TftpServer:
         """Resolves requested payload either from file or default in-memory buffer."""
         if self.default_payload is not None:
             return self.default_payload
+        # Strictly reject path traversal attempts or directory requests
+        if (
+            not filename
+            or ".." in filename
+            or "/" in filename
+            or "\\" in filename
+            or os.path.isabs(filename)
+            or filename in (".", "..")
+        ):
+            return None
         if self.served_file and os.path.isfile(self.served_file):
             try:
                 with open(self.served_file, "rb") as f:
                     return f.read()
             except (OSError, PermissionError):
                 return None
-        safe_filename = os.path.basename(filename)
-        if safe_filename and os.path.isfile(safe_filename):
+        if os.path.isfile(filename):
             try:
-                with open(safe_filename, "rb") as f:
+                with open(filename, "rb") as f:
                     return f.read()
             except (OSError, PermissionError):
                 return None
