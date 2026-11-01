@@ -64,13 +64,28 @@ raw = open(base_bin, "rb").read()
 assert raw[:4] == b"cr6b", f"Unexpected base magic: {raw[:4]!r}"
 
 # Extract & patch lzma-loader stub (0x0010..0x1834): console=ttyS0,38400 -> console=ttyS0,115200
+# and shift _lzma_data_end/.data/.bss/_stack by +0x4000 (consuming 16 KB of 62.9 KB zero padding before 0x1B0000 hsqsFAKE)
 stub = bytearray(raw[0x0010:0x1834])
 assert stub[0x1660:0x1674] == b"console=ttyS0,38400\x00"
 stub[0x1660:0x1675] = b"console=ttyS0,115200\x00"
+for off in [
+    0x005C, 0x008C, 0x00C4, 0x00CC, 0x00EC,
+    0x0114, 0x011C, 0x0124, 0x0134,
+    0x01B8, 0x01D0, 0x01D4, 0x01E0,
+    0x0238, 0x0258, 0x02A0, 0x02A4, 0x02A8, 0x02AC, 0x02B0, 0x02B8,
+    0x033C, 0x0348, 0x0350, 0x0360, 0x036C,
+]:
+    w, = struct.unpack_from("<I", stub, off)
+    imm = w & 0xFFFF
+    assert imm in (0x0A0C, 0x0A20, 0x0A40, 0x0A44, 0x0A48, 0x0A4C, 0x0A50, 0x0A60, 0x2A60)
+    struct.pack_into("<I", stub, off, (w & 0xFFFF0000) | ((imm + 0x4000) & 0xFFFF))
 open(os.path.join(stage_dir, "loader_stub.bin"), "wb").write(stub)
 
-# Save loader .data + fake-rootfs trailer (0x1A0A1C..0x1B0284)
-open(os.path.join(stage_dir, "loader_tail_and_fakeroot.bin"), "wb").write(raw[0x1A0A1C:0x1B0284])
+# Save loader .data + fake-rootfs trailer shifted by +0x4000 so hsqsFAKE stays at 0x1B0000 and SquashFS at 0x1B0284
+orig_tail = raw[0x1A0A1C:0x1B0284]
+assert all(b == 0 for b in orig_tail[0x34:0xF5E4]) and orig_tail[0xF5E4:0xF5EC] == b"hsqsFAKE"
+new_tail = orig_tail[:0x34] + b"\x00" * (0xF5E4 - 0x4000 - 0x34) + orig_tail[0xF5E4:]
+open(os.path.join(stage_dir, "loader_tail_and_fakeroot.bin"), "wb").write(new_tail)
 
 # Extract SquashFS 4.0 XZ rootfs (0x1B0284..end-2)
 sqfs = raw[0x1B0284:-2]
@@ -104,16 +119,13 @@ for off, exp_old, new_val, desc in patches:
 dtb_bytes = open(os.path.join(stage_dir, "tenda-ac10-v1.dtb"), "rb").read()
 combined = bytes(vmlinux) + dtb_bytes
 
-# Compress with raw LZMA1 (lc=3, lp=0, pb=2, dict_size=8MB) + 8-byte LE uncompressed size header
-filters = [{"id": lzma.FILTER_LZMA1, "lc": 3, "lp": 0, "pb": 2, "dict_size": 8 * 1024 * 1024, "mode": lzma.MODE_NORMAL, "nice_len": 64, "mf": lzma.MF_BT4}]
+# Compress with OpenWrt MIPS32 LZMA1 (lc=1, lp=2, pb=2 -> props=0x6D, dict_size=8MB) + 8-byte LE uncompressed size header
+filters = [{"id": lzma.FILTER_LZMA1, "lc": 1, "lp": 2, "pb": 2, "dict_size": 8 * 1024 * 1024, "mode": lzma.MODE_NORMAL, "nice_len": 128, "mf": lzma.MF_BT4}]
 comp_stream = lzma.compress(combined, format=lzma.FORMAT_RAW, filters=filters)
-# Raw FORMAT_RAW does not include props or size; construct standard 13-byte LZMA header:
-# props byte = (pb * 5 + lp) * 9 + lc = (2 * 5 + 0) * 9 + 3 = 93 = 0x5D, dict_size = 0x00800000
-lzma_hdr = struct.pack("<BIQ", 0x5D, 8 * 1024 * 1024, len(combined))
+assert lzma.decompress(comp_stream, format=lzma.FORMAT_RAW, filters=filters) == combined, "LZMA round-trip verification failed!"
+lzma_hdr = struct.pack("<BIQ", 0x6D, 8 * 1024 * 1024, len(combined))
 lzma_blob = lzma_hdr + comp_stream
-# Verify decompression matches combined byte-for-byte
-assert lzma.decompress(lzma_blob) == combined, "LZMA round-trip verification failed!"
-max_lzma_len = 0x19F1E8
+max_lzma_len = 0x19F1E8 + 0x4000
 assert len(lzma_blob) <= max_lzma_len, f"LZMA kernel {len(lzma_blob)} > max {max_lzma_len}"
 lzma_padded = lzma_blob + b"\x00" * (max_lzma_len - len(lzma_blob))
 open(os.path.join(stage_dir, "kernel_lzma_padded.bin"), "wb").write(lzma_padded)
