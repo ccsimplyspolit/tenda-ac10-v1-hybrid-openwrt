@@ -1,0 +1,38 @@
+import sys
+sys.path.insert(0, r"K:\aoe4_dlc\.agents\teamwork\explorer_driver_hwnat_re")
+import capstone
+from re_disasm import load_environment, resolve_symbol
+
+data, symbols, sym_list = load_environment()
+md = capstone.Cs(capstone.CS_ARCH_MIPS, capstone.CS_MODE_MIPS32 + capstone.CS_MODE_LITTLE_ENDIAN)
+md.detail = True
+
+def disassemble_func(addr, count=60):
+    sym = resolve_symbol(addr, sym_list)
+    print(f"\n=======================================================")
+    print(f"Disassembly of {sym} at 0x{addr:08x} ({count} instructions):")
+    print(f"=======================================================")
+    start_off = addr - 0x80000000
+    code = data[start_off:start_off + count * 4]
+    c = 0
+    for insn in md.disasm(code, addr):
+        extra = ""
+        for op in insn.operands:
+            if op.type == capstone.mips.MIPS_OP_IMM:
+                target = op.imm
+                if target >= 0x80000000:
+                    extra += f" ; {resolve_symbol(target, sym_list)}"
+                elif target > 0x1000:
+                    extra += f" ; 0x{target:x}"
+        line = f"0x{insn.address:08x}:  {insn.bytes.hex()}   {insn.mnemonic:<8} {insn.op_str:<30} {extra}"
+        print(line)
+        c += 1
+        if c >= count:
+            break
+
+# Disassemble true ASIC table setters
+disassemble_func(0x801e5620, 70) # rtl8651_setAsicNaptTcpUdpTable
+disassemble_func(0x801e3e8c, 60) # rtl8651_setAsicRouting
+disassemble_func(0x801e40bc, 50) # rtl8651_setAsicNextHopTable
+disassemble_func(0x801e3ae8, 50) # rtl8651_setAsicArp
+disassemble_func(0x801e4274, 50) # rtl8651_setAsicExtIntIpTable
