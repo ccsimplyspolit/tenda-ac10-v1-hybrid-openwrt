@@ -221,7 +221,23 @@ if ($Key5G -match '^<YOUR_' -or [string]::IsNullOrWhiteSpace($Key5G) -or ($Key5G
 }
 Write-Step ("5.0 GHz Key : {0}" -f (Format-MaskedSecret $Key5G)) "Green"
 
-# 6. Resolve WAN MTU, Custom Upstream DNS, Wi-Fi Channels & Static DHCP Leases
+# 6. Resolve WAN Protocol (Static vs DHCP), MTU, Custom Upstream DNS, Wi-Fi Channels & Static DHCP Leases
+$wanProto = "dhcp"
+$wanIpAddr = ""
+$wanNetmask = "255.255.255.0"
+$wanGateway = ""
+if ($configText -match '(?m)^wan1\.connecttype\s*=\s*1\s*$' -and $configText -match '(?m)^wan1\.ip\s*=\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})\s*$') {
+    $wanProto = "static"
+    $wanIpAddr = $Matches[1].Trim()
+    if ($configText -match '(?m)^wan1\.mask\s*=\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})\s*$') {
+        $wanNetmask = $Matches[1].Trim()
+    }
+    if ($configText -match '(?m)^wan1\.gateway\s*=\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})\s*$') {
+        $wanGateway = $Matches[1].Trim()
+    }
+    Write-Step "WAN Mode    : Static IP ($wanIpAddr / $wanNetmask, Gateway $wanGateway)" "Green"
+}
+
 $wanMtu = 1500
 if ($configText -match '(?m)^wan1\.(?:dynamicMTU|staticMTU)\s*=\s*(\d+)') {
     $parsedMtu = [int]$Matches[1]
@@ -229,13 +245,11 @@ if ($configText -match '(?m)^wan1\.(?:dynamicMTU|staticMTU)\s*=\s*(\d+)') {
 }
 
 $customDnsList = @()
-if ($configText -match '(?m)^lan\.dns\.auto\s*=\s*0\s*$') {
-    foreach ($dk in @('lan.dns.hand1', 'lan.dns.hand2')) {
-        if ($configText -match "(?m)^$([regex]::Escape($dk))\s*=\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})\s*$") {
-            $dIp = $Matches[1].Trim()
-            if ($dIp -ne '0.0.0.0' -and ($customDnsList -notcontains $dIp)) {
-                $customDnsList += $dIp
-            }
+foreach ($dk in @('wan1.dhcp.dns.hand1', 'wan1.dhcp.dns.hand2', 'wan1.dns1', 'wan1.dns2', 'lan.dns.hand1', 'lan.dns.hand2')) {
+    if ($configText -match "(?m)^$([regex]::Escape($dk))\s*=\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})\s*$") {
+        $dIp = $Matches[1].Trim()
+        if ($dIp -ne '0.0.0.0' -and ($customDnsList -notcontains $dIp)) {
+            $customDnsList += $dIp
         }
     }
 }
@@ -325,8 +339,8 @@ if ($customDnsList.Count -gt 0) {
     $dnsUciBlock = ($dnsLines -join "`n")
 }
 
-$chan5GUci = if (-not [string]::IsNullOrWhiteSpace($chan5G)) { "uci -q set wireless.radio0.channel='$chan5G'" } else { ":" }
-$chan2GUci = if (-not [string]::IsNullOrWhiteSpace($chan2G)) { "uci -q set wireless.radio1.channel='$chan2G'" } else { ":" }
+$chan5GUci = if (-not [string]::IsNullOrWhiteSpace($chan5G)) { "uci -q set wireless.radio0.channel='$chan5G' || true" } else { ":" }
+$chan2GUci = if (-not [string]::IsNullOrWhiteSpace($chan2G)) { "uci -q set wireless.radio1.channel='$chan2G' || true" } else { ":" }
 
 $dhcpStaticLines = @("while uci -q delete dhcp.@host[0] 2>/dev/null; do :; done")
 foreach ($sl in $staticLeases) {
@@ -338,36 +352,63 @@ foreach ($sl in $staticLeases) {
 }
 $dhcpStaticBlock = ($dhcpStaticLines -join "`n")
 
+$wanUciProtoBlock = "uci set network.wan.proto='dhcp'"
+$warmHostsStr = "192.168.0.176 192.168.0.100 1.1.1.1"
+if ($wanProto -eq "static" -and -not [string]::IsNullOrWhiteSpace($wanIpAddr)) {
+    $shWanIp = Format-ShEscapedString $wanIpAddr
+    $shWanMask = Format-ShEscapedString $wanNetmask
+    $wanLines = @(
+        "uci set network.wan.proto='static'",
+        "uci set network.wan.ipaddr=$shWanIp",
+        "uci set network.wan.netmask=$shWanMask"
+    )
+    if (-not [string]::IsNullOrWhiteSpace($wanGateway)) {
+        $shWanGw = Format-ShEscapedString $wanGateway
+        $wanLines += "uci set network.wan.gateway=$shWanGw"
+        $warmHostsStr = "192.168.0.176 192.168.0.100 $wanGateway 1.1.1.1"
+    }
+    $wanUciProtoBlock = ($wanLines -join "`n")
+}
+
 $remoteScript = @"
 #!/bin/sh
 set -e
 
-# 1. Provision Cloned WAN MAC, Protocol, MTU & Custom DNS (eth0.1 / VLAN 1)
-uci set network.wan.proto='dhcp'
+# 0. Wait for first-boot uci-defaults (99-dir842-m5) to complete if still in progress
+_w=0
+while [ `$_w -lt 30 ] && [ "`$(uci -q get system.@system[0].dir842_m5_seeded 2>/dev/null || true)" != "1" ] && [ -e /etc/uci-defaults/99-dir842-m5 ]; do
+    sleep 1
+    _w=`$((_w + 1))
+done
+
+# 1. Provision Cloned WAN MAC, Protocol, MTU, Custom DNS & ASIC Warm Hosts (eth0.1 / VLAN 1)
+$wanUciProtoBlock
 uci set network.wan.mtu='$wanMtu'
 uci set network.wan.macaddr=$shWanMac
-uci -q set network.wan_eth0_1_dev.macaddr=$shWanMac
+uci -q set network.wan_eth0_1_dev.macaddr=$shWanMac 2>/dev/null || true
 $dnsUciBlock
 uci commit network
+uci -q set dir842.asic.warm_hosts='$warmHostsStr' 2>/dev/null || true
+uci -q commit dir842 2>/dev/null || true
 ip link set dev eth0.1 down 2>/dev/null || true
 ip link set dev eth0.1 address $shWanMac 2>/dev/null || true
 ip link set dev eth0.1 up 2>/dev/null || true
 
 # 2. Provision LAN DHCP Pool & Static Reservations
-uci -q set dhcp.lan.start='$dhcpStart'
-uci -q set dhcp.lan.limit='$dhcpLimit'
-uci -q set dhcp.lan.leasetime='24h'
+uci -q set dhcp.lan.start='$dhcpStart' || true
+uci -q set dhcp.lan.limit='$dhcpLimit' || true
+uci -q set dhcp.lan.leasetime='24h' || true
 $dhcpStaticBlock
 uci commit dhcp
 
 # 3. Provision 5 GHz Wi-Fi (radio0)
-uci -q set wireless.radio0.disabled='0'
+uci -q set wireless.radio0.disabled='0' || true
 uci -q delete wireless.radio0.disabled 2>/dev/null || true
 $chan5GUci
 if uci -q get wireless.default_radio0 >/dev/null 2>&1; then
     W_IF0="default_radio0"
 else
-    W_IF0=`$(uci show wireless 2>/dev/null | grep '=wifi-iface' | cut -d. -f2 | cut -d= -f1 | head -n1)
+    W_IF0=`$(uci show wireless 2>/dev/null | grep '=wifi-iface' | cut -d. -f2 | cut -d= -f1 | head -n1 || true)
 fi
 if [ -n "`$W_IF0" ]; then
     uci set wireless.`${W_IF0}.ssid=$shSsid5G
@@ -377,13 +418,13 @@ if [ -n "`$W_IF0" ]; then
 fi
 
 # 4. Provision 2.4 GHz Wi-Fi (radio1)
-uci -q set wireless.radio1.disabled='0'
+uci -q set wireless.radio1.disabled='0' || true
 uci -q delete wireless.radio1.disabled 2>/dev/null || true
 $chan2GUci
 if uci -q get wireless.default_radio1 >/dev/null 2>&1; then
     W_IF1="default_radio1"
 else
-    W_IF1=`$(uci show wireless 2>/dev/null | grep '=wifi-iface' | cut -d. -f2 | cut -d= -f1 | tail -n1)
+    W_IF1=`$(uci show wireless 2>/dev/null | grep '=wifi-iface' | cut -d. -f2 | cut -d= -f1 | tail -n1 || true)
 fi
 if [ -n "`$W_IF1" ]; then
     uci set wireless.`${W_IF1}.ssid=$shSsid2G
@@ -392,30 +433,49 @@ if [ -n "`$W_IF1" ]; then
     uci -q delete wireless.`${W_IF1}.disabled 2>/dev/null || true
 fi
 
-for iface in `$(uci show wireless 2>/dev/null | grep "=wifi-iface" | cut -d"." -f2 | cut -d"=" -f1); do
-    dev=`$(uci -q get wireless."`$iface".device)
+for iface in `$(uci show wireless 2>/dev/null | grep "=wifi-iface" | cut -d"." -f2 | cut -d"=" -f1 || true); do
+    dev=`$(uci -q get wireless."`$iface".device 2>/dev/null || true)
     if [ "`$dev" = "radio0" ]; then
-        uci -q set wireless."`$iface".ssid=$shSsid5G
-        uci -q set wireless."`$iface".encryption='psk2'
-        uci -q set wireless."`$iface".key=$shKey5G
+        uci -q set wireless."`$iface".ssid=$shSsid5G || true
+        uci -q set wireless."`$iface".encryption='psk2' || true
+        uci -q set wireless."`$iface".key=$shKey5G || true
         uci -q delete wireless."`$iface".disabled 2>/dev/null || true
     elif [ "`$dev" = "radio1" ]; then
-        uci -q set wireless."`$iface".ssid=$shSsid2G
-        uci -q set wireless."`$iface".encryption='psk2'
-        uci -q set wireless."`$iface".key=$shKey2G
+        uci -q set wireless."`$iface".ssid=$shSsid2G || true
+        uci -q set wireless."`$iface".encryption='psk2' || true
+        uci -q set wireless."`$iface".key=$shKey2G || true
         uci -q delete wireless."`$iface".disabled 2>/dev/null || true
     fi
 done
 uci commit wireless
 
-# 5. Reload Network, DHCP & Wi-Fi daemons
+# 5. Reload Network, DHCP, Wi-Fi & RTL8197FS Hardware NAT ASIC (syncing cloned eth0.1 WAN MAC to ASIC netif table)
 /etc/init.d/network reload
 /etc/init.d/dnsmasq reload 2>/dev/null || true
-wifi reload
+wifi reload 2>/dev/null || true
+if [ -x /etc/init.d/dir842-asic ]; then
+    (
+        sleep 2
+        ip link set dev eth0.1 address $shWanMac 2>/dev/null || true
+        /etc/init.d/dir842-asic restart >/dev/null 2>&1 || true
+        _i=0
+        while [ `$_i -lt 45 ]; do
+            if [ -d /sys/class/net/br-lan/brif/wlan0 ] && [ -d /sys/class/net/br-lan/brif/wlan1 ] && [ "`$(cat /sys/class/net/wlan1/operstate 2>/dev/null)" = "up" ]; then
+                break
+            fi
+            _i=`$((_i + 1))
+            sleep 1
+        done
+        sleep 5
+        ip link set dev eth0.1 address $shWanMac 2>/dev/null || true
+        /etc/init.d/dir842-asic restart >/dev/null 2>&1 || true
+    ) </dev/null >/dev/null 2>&1 &
+fi
 
 # 6. Output Verification Banner
 echo "TENDA_AC10_PROVISIONED: WAN_MAC=`$(uci -q get network.wan.macaddr) 5G_SSID=`$(uci -q get wireless.`${W_IF0}.ssid) 2G_SSID=`$(uci -q get wireless.`${W_IF1}.ssid)"
 "@
+$remoteScript = $remoteScript.Replace("`r`n", "`n").Replace("`r", "`n")
 
 if ($DryRun) {
     Write-Step "=== DRY-RUN: Generated OpenWrt 4.14 Provisioning Script ===" "Yellow"

@@ -461,6 +461,13 @@ assert "do_mount_root() {\n\tmount_root" in s_mr
 s_mr = s_mr.replace("do_mount_root() {\n\tmount_root", rfd_guard, 1)
 open(p_mr, "w", encoding="utf-8").write(s_mr)
 
+# 5d. /lib/preinit/00_preinit.conf: prevent floating GPIO 6 (wps) from pausing preinit in failsafe mode
+p_pi00 = os.path.join(root, "lib/preinit/00_preinit.conf")
+if os.path.exists(p_pi00):
+    s_pi00 = open(p_pi00, "r", encoding="utf-8").read()
+    s_pi00 = s_pi00.replace('pi_preinit_no_failsafe=""', 'pi_preinit_no_failsafe="y"')
+    open(p_pi00, "w", encoding="utf-8").write(s_pi00)
+
 # 6. /etc/uci-defaults/09_wireless-dualband-dir842: 2.4G SSID = Tenda-AC10-2G, keep urban interference-safe HT20 default,
 #    and drop D-Link's hardcoded country='1' so rtl8192cd.sh inherits factory HW_WLAN1_REG_DOMAIN from /dev/mtd1.
 p_w2 = os.path.join(root, "etc/uci-defaults/09_wireless-dualband-dir842")

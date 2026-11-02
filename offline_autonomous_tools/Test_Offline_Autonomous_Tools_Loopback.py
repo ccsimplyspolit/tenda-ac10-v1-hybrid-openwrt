@@ -587,7 +587,7 @@ def main() -> int:
         tr.check(
             res_ow_dry.returncode == 0
             and "[DRY-RUN]" in dry_out
-            and "uci set network.wan.proto='dhcp'" in dry_out
+            and ("uci set network.wan.proto='dhcp'" in dry_out or "uci set network.wan.proto='static'" in dry_out)
             and "uci set network.wan.mtu=" in dry_out
             and "uci set network.wan.macaddr=" in dry_out
             and "network.wan_eth0_1_dev.macaddr=" in dry_out
