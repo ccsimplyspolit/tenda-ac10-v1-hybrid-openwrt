@@ -587,13 +587,18 @@ def main() -> int:
         tr.check(
             res_ow_dry.returncode == 0
             and "[DRY-RUN]" in dry_out
+            and "uci set network.wan.proto='dhcp'" in dry_out
+            and "uci set network.wan.mtu=" in dry_out
             and "uci set network.wan.macaddr=" in dry_out
             and "network.wan_eth0_1_dev.macaddr=" in dry_out
             and "uci commit network" in dry_out
+            and "uci -q set dhcp.lan.start=" in dry_out
+            and "uci commit dhcp" in dry_out
             and "/etc/init.d/network reload" in dry_out
+            and "/etc/init.d/dnsmasq reload" in dry_out
             and "uci commit wireless" in dry_out
             and "wifi reload" in dry_out,
-            "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1 zero-argument -DryRun mode & generated UCI command verification",
+            "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1 zero-argument -DryRun mode & generated UCI command verification (WAN/DNS/DHCP/Wi-Fi)",
             f"rc={res_ow_dry.returncode}",
         )
 

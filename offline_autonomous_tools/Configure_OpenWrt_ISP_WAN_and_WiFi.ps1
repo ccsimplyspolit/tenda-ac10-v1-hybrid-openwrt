@@ -221,6 +221,67 @@ if ($Key5G -match '^<YOUR_' -or [string]::IsNullOrWhiteSpace($Key5G) -or ($Key5G
 }
 Write-Step ("5.0 GHz Key : {0}" -f (Format-MaskedSecret $Key5G)) "Green"
 
+# 6. Resolve WAN MTU, Custom Upstream DNS, Wi-Fi Channels & Static DHCP Leases
+$wanMtu = 1500
+if ($configText -match '(?m)^wan1\.(?:dynamicMTU|staticMTU)\s*=\s*(\d+)') {
+    $parsedMtu = [int]$Matches[1]
+    if ($parsedMtu -ge 576 -and $parsedMtu -le 1500) { $wanMtu = $parsedMtu }
+}
+
+$customDnsList = @()
+if ($configText -match '(?m)^lan\.dns\.auto\s*=\s*0\s*$') {
+    foreach ($dk in @('lan.dns.hand1', 'lan.dns.hand2')) {
+        if ($configText -match "(?m)^$([regex]::Escape($dk))\s*=\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})\s*$") {
+            $dIp = $Matches[1].Trim()
+            if ($dIp -ne '0.0.0.0' -and ($customDnsList -notcontains $dIp)) {
+                $customDnsList += $dIp
+            }
+        }
+    }
+}
+if ($customDnsList.Count -gt 0) {
+    Write-Step ("Custom DNS  : {0}" -f ($customDnsList -join ", ")) "Green"
+}
+
+$chan2G = ""
+if ($configText -match '(?m)^wl2g\.public\.channel\s*=\s*(\d+)\s*$') {
+    $c2 = [int]$Matches[1]
+    if ($c2 -ge 1 -and $c2 -le 13) { $chan2G = $c2.ToString() }
+}
+$chan5G = ""
+if ($configText -match '(?m)^wl5g\.public\.channel\s*=\s*(\d+)\s*$') {
+    $c5 = [int]$Matches[1]
+    if ($c5 -ge 36 -and $c5 -le 165) { $chan5G = $c5.ToString() }
+}
+
+$dhcpStart = 100
+$dhcpLimit = 101
+if ($configText -match '(?m)^dhcps\.start\s*=\s*\d+\.\d+\.\d+\.(\d+)\s*$') {
+    $sOct = [int]$Matches[1]
+    if ($sOct -ge 2 -and $sOct -le 250) {
+        $dhcpStart = $sOct
+        if ($configText -match '(?m)^dhcps\.end\s*=\s*\d+\.\d+\.\d+\.(\d+)\s*$') {
+            $eOct = [int]$Matches[1]
+            if ($eOct -ge $sOct -and $eOct -le 254) {
+                $dhcpLimit = ($eOct - $sOct + 1)
+            }
+        }
+    }
+}
+
+$staticLeases = @()
+$leaseMatches = [regex]::Matches($configText, '(?m)^dhcps\.Staticip\d+\s*=\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3});([0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5})')
+foreach ($lm in $leaseMatches) {
+    $sIp = $lm.Groups[1].Value.Trim()
+    $sMac = Format-NormalizedMac $lm.Groups[2].Value.Trim()
+    if (Test-ValidMacAddress $sMac) {
+        $staticLeases += [PSCustomObject]@{ IP = $sIp; MAC = $sMac }
+    }
+}
+if ($staticLeases.Count -gt 0) {
+    Write-Step ("Static DHCP : {0} reservation(s) detected" -f $staticLeases.Count) "Green"
+}
+
 # --- LOCATE SSH CLIENT ---
 $sshCmd = Get-Command "ssh.exe" -ErrorAction SilentlyContinue
 if ($null -eq $sshCmd) {
@@ -239,9 +300,10 @@ Write-Step "OpenSSH Client: $sshPath" "Green"
 if ($VerifyOnly) {
     Write-Step "=== VerifyOnly: Configuration and Local Prerequisites PASS ===" "Green"
     Write-Step ("Target      : {0}@{1}:{2}" -f $SshUser, $TargetIp, $TargetPort) "Green"
-    Write-Step ("WAN MAC     : {0}" -f $WanMac) "Green"
-    Write-Step ("2.4 GHz     : SSID='{0}', Key={1}" -f $Ssid2G, (Format-MaskedSecret $Key2G)) "Green"
-    Write-Step ("5.0 GHz     : SSID='{0}', Key={1}" -f $Ssid5G, (Format-MaskedSecret $Key5G)) "Green"
+    Write-Step ("WAN MAC     : {0} (DHCP MTU={1})" -f $WanMac, $wanMtu) "Green"
+    Write-Step ("2.4 GHz     : SSID='{0}', Channel={1}, Key={2}" -f $Ssid2G, $(if ($chan2G) { $chan2G } else { "auto" }), (Format-MaskedSecret $Key2G)) "Green"
+    Write-Step ("5.0 GHz     : SSID='{0}', Channel={1}, Key={2}" -f $Ssid5G, $(if ($chan5G) { $chan5G } else { "auto" }), (Format-MaskedSecret $Key5G)) "Green"
+    Write-Step ("DHCP Pool   : start={0}, limit={1}, static_leases={2}" -f $dhcpStart, $dhcpLimit, $staticLeases.Count) "Green"
     Write-Step ("OpenSSH     : {0}" -f $sshPath) "Green"
     Write-Step "VerifyOnly mode completed successfully." "Green"
     exit 0
@@ -254,21 +316,54 @@ $shKey2G   = Format-ShEscapedString $Key2G
 $shSsid5G  = Format-ShEscapedString $Ssid5G
 $shKey5G   = Format-ShEscapedString $Key5G
 
+$dnsUciBlock = ""
+if ($customDnsList.Count -gt 0) {
+    $dnsLines = @("uci set network.wan.peerdns='0'", "uci -q delete network.wan.dns 2>/dev/null || true")
+    foreach ($d in $customDnsList) {
+        $dnsLines += ("uci add_list network.wan.dns={0}" -f (Format-ShEscapedString $d))
+    }
+    $dnsUciBlock = ($dnsLines -join "`n")
+}
+
+$chan5GUci = if (-not [string]::IsNullOrWhiteSpace($chan5G)) { "uci -q set wireless.radio0.channel='$chan5G'" } else { ":" }
+$chan2GUci = if (-not [string]::IsNullOrWhiteSpace($chan2G)) { "uci -q set wireless.radio1.channel='$chan2G'" } else { ":" }
+
+$dhcpStaticLines = @("while uci -q delete dhcp.@host[0] 2>/dev/null; do :; done")
+foreach ($sl in $staticLeases) {
+    $shSlIp = Format-ShEscapedString $sl.IP
+    $shSlMac = Format-ShEscapedString $sl.MAC.ToLowerInvariant()
+    $dhcpStaticLines += "_h=`$(uci add dhcp host)"
+    $dhcpStaticLines += "uci set dhcp.`"`$_h`".ip=$shSlIp"
+    $dhcpStaticLines += "uci set dhcp.`"`$_h`".mac=$shSlMac"
+}
+$dhcpStaticBlock = ($dhcpStaticLines -join "`n")
+
 $remoteScript = @"
 #!/bin/sh
 set -e
 
-# 1. Provision Cloned WAN MAC (eth0.1 / VLAN 1)
+# 1. Provision Cloned WAN MAC, Protocol, MTU & Custom DNS (eth0.1 / VLAN 1)
+uci set network.wan.proto='dhcp'
+uci set network.wan.mtu='$wanMtu'
 uci set network.wan.macaddr=$shWanMac
 uci -q set network.wan_eth0_1_dev.macaddr=$shWanMac
+$dnsUciBlock
 uci commit network
 ip link set dev eth0.1 down 2>/dev/null || true
 ip link set dev eth0.1 address $shWanMac 2>/dev/null || true
 ip link set dev eth0.1 up 2>/dev/null || true
 
-# 2. Provision 5 GHz Wi-Fi (radio0)
+# 2. Provision LAN DHCP Pool & Static Reservations
+uci -q set dhcp.lan.start='$dhcpStart'
+uci -q set dhcp.lan.limit='$dhcpLimit'
+uci -q set dhcp.lan.leasetime='24h'
+$dhcpStaticBlock
+uci commit dhcp
+
+# 3. Provision 5 GHz Wi-Fi (radio0)
 uci -q set wireless.radio0.disabled='0'
 uci -q delete wireless.radio0.disabled 2>/dev/null || true
+$chan5GUci
 if uci -q get wireless.default_radio0 >/dev/null 2>&1; then
     W_IF0="default_radio0"
 else
@@ -281,9 +376,10 @@ if [ -n "`$W_IF0" ]; then
     uci -q delete wireless.`${W_IF0}.disabled 2>/dev/null || true
 fi
 
-# 3. Provision 2.4 GHz Wi-Fi (radio1)
+# 4. Provision 2.4 GHz Wi-Fi (radio1)
 uci -q set wireless.radio1.disabled='0'
 uci -q delete wireless.radio1.disabled 2>/dev/null || true
+$chan2GUci
 if uci -q get wireless.default_radio1 >/dev/null 2>&1; then
     W_IF1="default_radio1"
 else
@@ -312,11 +408,12 @@ for iface in `$(uci show wireless 2>/dev/null | grep "=wifi-iface" | cut -d"." -
 done
 uci commit wireless
 
-# 4. Reload Network & Wi-Fi daemons
+# 5. Reload Network, DHCP & Wi-Fi daemons
 /etc/init.d/network reload
+/etc/init.d/dnsmasq reload 2>/dev/null || true
 wifi reload
 
-# 5. Output Verification Banner
+# 6. Output Verification Banner
 echo "TENDA_AC10_PROVISIONED: WAN_MAC=`$(uci -q get network.wan.macaddr) 5G_SSID=`$(uci -q get wireless.`${W_IF0}.ssid) 2G_SSID=`$(uci -q get wireless.`${W_IF1}.ssid)"
 "@
 
@@ -330,6 +427,10 @@ if ($DryRun) {
     if (-not [string]::IsNullOrWhiteSpace($Key5G)) {
         $escapedK5 = [regex]::Escape($Key5G)
         $maskedScript = $maskedScript -replace $escapedK5, "********"
+    }
+    foreach ($sl in $staticLeases) {
+        $escapedMac = [regex]::Escape($sl.MAC.ToLowerInvariant())
+        $maskedScript = $maskedScript -replace $escapedMac, "xx:xx:xx:xx:xx:xx"
     }
     Write-Host $maskedScript -ForegroundColor Gray
     Write-Step "[DRY-RUN] Simulating WAN netdevice and status checks..." "Yellow"

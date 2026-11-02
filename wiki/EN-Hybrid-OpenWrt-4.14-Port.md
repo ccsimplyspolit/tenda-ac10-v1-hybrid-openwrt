@@ -267,3 +267,23 @@ Two binary images are provided in the [Releases](https://github.com/ccsimplyspol
    python tools/autonomous_recovery/flash_firmware.py --image releases/tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin
    ```
 5. Wait for the automatic upload, flash, and reboot cycle. Reset your PC to DHCP to obtain an address from `192.168.0.1`.
+
+---
+
+## 7. 1-Click Autonomous ISP & Wi-Fi Settings Migration (Zero Internet Required)
+
+To automatically migrate your ISP and wireless configuration from your stock `RouterCfm.cfg` backup immediately after flashing Hybrid OpenWrt 4.14.187, use the zero-dependency offline scripts in `offline_autonomous_tools`:
+
+1. **1-Click TFTP Bootloader Flasher (`192.168.1.6:69`):**
+   ```cmd
+   offline_autonomous_tools\Flash_Hybrid_OpenWrt_4.14_TFTP.bat
+   ```
+2. **1-Click Post-Flash ISP WAN, DNS, DHCP & Wi-Fi Provisioner (`192.168.0.1:22`):**
+   ```cmd
+   offline_autonomous_tools\Configure_OpenWrt_ISP_WAN_and_WiFi.bat
+   ```
+   This script parses your local `RouterCfm.cfg` backup and configures OpenWrt over local SSH (`uci`):
+   - Cloned ISP `WAN MAC` (`network.wan.macaddr` and `eth0.1`), `DHCP` protocol, and `MTU`;
+   - Custom upstream `DNS` servers (`1.1.1.1`, `8.8.8.8`);
+   - `LAN DHCP` pool parameters and `Static DHCP` reservations (`dhcp.@host`);
+   - Dual-band **2.4 GHz** & **5 GHz** `SSID` names, radio channels, and `WPA2-PSK` passphrases.
