@@ -60,4 +60,4 @@ If you prefer flashing manually without helper scripts (`EN / RU`):
 ## 4. Консоль UART и программатор CH341A (на крайний случай)
 
 - **3.3V UART (115200 8N1):** 4-контактная гребёнка на плате: `Pin 1` (квадратный) = `3.3V` (**не подключать!**), `Pin 2` = `TX`, `Pin 3` = `RX`, `Pin 4` = `GND`. Нажатие `ESC` при подаче питания открывает консоль `<RealTek>`.
-- **Программатор SPI NOR (`CH341A` + прищепка SOIC-8 3.3V):** микросхема **Winbond W25Q64FV / W25Q64JV** (`JEDEC 0xEF4017`, ровно `8,388,608` байт). Эталонные разделы `mtd0` (`bootloader`) и очищенный шаблон `mtd1` лежат в папке [`01_Stock_Firmware_and_Partitions/`](01_Stock_Firmware_and_Partitions/).
+- **Программатор SPI NOR (`CH341A` + прищепка SOIC-8 3.3V):** микросхема **Winbond W25Q64FV / W25Q64JV** (`JEDEC 0xEF4017`, ровно `8,388,608` байт). Эталонные разделы `mtd0` (`bootloader`) и очищенный шаблон `mtd1` лежат в папке [`01_Stock_Firmware_and_Partitions/`](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/tree/main/01_Stock_Firmware_and_Partitions).
