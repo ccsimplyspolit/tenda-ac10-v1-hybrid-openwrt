@@ -90,10 +90,14 @@ In our Hybrid OpenWrt 4.14 release, this configuration has been corrected to **`
 
 ## 3. Wi-Fi & Wireless Performance Questions
 
-### Q10: Why do my devices fail to detect or connect to the 5 GHz network (4PDA Post #3577)?
-In 4PDA discussions (posts #3577..#3581), multiple users reported that client devices (laptops, Android phones) could not detect the 5 GHz SSID:
-- **Root Cause**: When 5 GHz channel selection is set to "Auto", the router frequently selects upper DFS channels (Channels 100..144 or 149..165) which many European/Russian client devices cannot scan due to regional regulatory domain limits.
-- **Solution**: Manually set the 5 GHz channel to **Channel 36 (UNII-1, 5180 MHz)** with **80 MHz channel width (VHT80)**. Channel 36 is globally supported, completely non-DFS, and delivers maximum throughput.
+### Q10: Why do my devices fail to detect or stay connected to the 5 GHz network?
+1. **DFS Channel Issue (4PDA Post #3577)**: When 5 GHz channel selection is set to "Auto", the router may select DFS channels (100..144) or 149..165 that European/CIS clients cannot scan. Always lock **Channel 36 (UNII-1, 5180 MHz)** with `country='US'` (`23 dBm` / 200 mW).
+2. **`VHT80` RF Poll Timeout in `rtw88_8822be` (`backports-5.8-rc2-1`)**: On Hybrid OpenWrt 4.14, setting `htmode='VHT80'` triggers `rtw8822b_config_trx_mode` RF poll timeouts and drops clients after ~2-11 seconds. Locking **`htmode='VHT20'`** on Channel 36 delivers rock-solid 2x2 802.11ac VHT-MCS 8/9 (~156-173 Mbps PHY) with **zero retries and zero disconnects**.
+3. **Bridged Wi-Fi -> WAN Hardware NAPT Blackhole & iOS Encrypted DNS Warning**:
+   - Realtek's `rtl819x_hwnat` NAPT engine accelerates wired-to-wired flows (~940 Mbps) when `hwnat=1`, **but blackholes outbound WAN packets originating from bridged Wi-Fi interfaces (`wlan1`)**. For mixed Wi-Fi + Ethernet routing, keep `hwnat=0` (`/etc/init.d/dir842-asic` keeps ASIC `router` VLAN/L2 tables armed) and enable Linux Software Flow Offloading (`firewall.@defaults[0].flow_offloading='1'`).
+   - To prevent Apple iOS from stalling on unroutable IPv6 ULA prefixes or displaying *"Privacy Warning: This network is blocking encrypted DNS traffic"*, delete `network.globals.ula_prefix`, set `dhcp.lan.ra='disabled'` & `dhcp.lan.dhcpv6='disabled'`, and advertise RFC 9462 DDR-capable resolvers first via DHCP Option 6 (`list dhcp_option '6,1.1.1.1,8.8.8.8,192.168.0.1'`).
+4. **2.4 GHz External Skyworks `SKY85303-11` FEM (`rtl8192cd.ko` Full Source Build Note)**:
+   - Pre-compiled DIR-842 R1 `rtl8192cd.ko` binaries lack Tenda AC10 V1.0's external PA/LNA tables (`data_PHY_REG_PG_8197Fmp_Type5`, `data_TXPWR_LMT_8197Fmp_Type5`, `Array_MP_8197F_CE_RadioA/B`). When building `rtl8192cd.ko` from source (`FULL_SOURCE_BUILD=1`), enable `CONFIG_PA_SKYWORKS_85303` / RFE Type 5 external FEM tables so `wlan0` drives the external `SKY85303-11` PA/LNA.
 
 ---
 

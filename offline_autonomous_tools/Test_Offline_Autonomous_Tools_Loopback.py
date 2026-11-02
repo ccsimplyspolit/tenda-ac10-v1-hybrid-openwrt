@@ -508,7 +508,7 @@ def main() -> int:
     print("\n==============================================================================")
     print(" 6. END-TO-END LOOPBACK & VALIDATION: Configure_OpenWrt_ISP_WAN_and_WiFi")
     print("==============================================================================")
-    repo_tools_dir = Path(r"C:\Users\sshunko\AppData\Local\Temp\tenda_ac10_public_repo\offline_autonomous_tools")
+    repo_tools_dir = Path(r"C:\Users\user\AppData\Local\Temp\tenda_ac10_public_repo\offline_autonomous_tools")
     repo_openwrt_ps1 = repo_tools_dir / "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1"
     repo_openwrt_bat = repo_tools_dir / "Configure_OpenWrt_ISP_WAN_and_WiFi.bat"
 

@@ -339,8 +339,8 @@ if ($customDnsList.Count -gt 0) {
     $dnsUciBlock = ($dnsLines -join "`n")
 }
 
-$chan5GUci = if (-not [string]::IsNullOrWhiteSpace($chan5G)) { "uci -q set wireless.radio0.channel='$chan5G' || true" } else { ":" }
-$chan2GUci = if (-not [string]::IsNullOrWhiteSpace($chan2G)) { "uci -q set wireless.radio1.channel='$chan2G' || true" } else { ":" }
+$chan5GUci = if (-not [string]::IsNullOrWhiteSpace($chan5G)) { "uci -q set wireless.radio0.channel='$chan5G' || true" } else { "uci -q set wireless.radio0.channel='36' || true" }
+$chan2GUci = if (-not [string]::IsNullOrWhiteSpace($chan2G)) { "uci -q set wireless.radio1.channel='$chan2G' || true" } else { "uci -q set wireless.radio1.channel='6' || true" }
 
 $dhcpStaticLines = @("while uci -q delete dhcp.@host[0] 2>/dev/null; do :; done")
 foreach ($sl in $staticLeases) {
@@ -394,16 +394,33 @@ ip link set dev eth0.1 down 2>/dev/null || true
 ip link set dev eth0.1 address $shWanMac 2>/dev/null || true
 ip link set dev eth0.1 up 2>/dev/null || true
 
-# 2. Provision LAN DHCP Pool & Static Reservations
+# 1b. Eliminate ULA IPv6 blackhole & enable Linux Software Flow Offloading (hwnat=0 prevents bridged Wi-Fi WAN blackhole)
+uci -q delete network.globals.ula_prefix 2>/dev/null || true
+uci commit network
+uci -q set firewall.@defaults[0].flow_offloading='1' || true
+uci -q set firewall.@defaults[0].flow_offloading_hw='0' || true
+uci commit firewall
+
+# 2. Provision LAN DHCP Pool, Static Reservations & Apple RFC 9462 DDR Encrypted DNS Compatibility
+uci -q set dhcp.@dnsmasq[0].rebind_protection='0' || true
+uci -q set dhcp.@dnsmasq[0].cachesize='1000' || true
 uci -q set dhcp.lan.start='$dhcpStart' || true
 uci -q set dhcp.lan.limit='$dhcpLimit' || true
 uci -q set dhcp.lan.leasetime='24h' || true
+uci -q set dhcp.lan.ra='disabled' || true
+uci -q set dhcp.lan.dhcpv6='disabled' || true
+uci -q delete dhcp.lan.ra_slaac 2>/dev/null || true
+uci -q delete dhcp.lan.ra_flags 2>/dev/null || true
+uci -q delete dhcp.lan.dhcp_option 2>/dev/null || true
+uci add_list dhcp.lan.dhcp_option='6,1.1.1.1,8.8.8.8,192.168.0.1'
 $dhcpStaticBlock
 uci commit dhcp
 
-# 3. Provision 5 GHz Wi-Fi (radio0)
+# 3. Provision 5 GHz Wi-Fi (radio0: VHT20 on Channel 36 + country=US 23 dBm avoids rtw88 VHT80 RF poll timeouts)
 uci -q set wireless.radio0.disabled='0' || true
 uci -q delete wireless.radio0.disabled 2>/dev/null || true
+uci -q set wireless.radio0.country='US' || true
+uci -q set wireless.radio0.htmode='VHT20' || true
 $chan5GUci
 if uci -q get wireless.default_radio0 >/dev/null 2>&1; then
     W_IF0="default_radio0"
@@ -412,14 +429,20 @@ else
 fi
 if [ -n "`$W_IF0" ]; then
     uci set wireless.`${W_IF0}.ssid=$shSsid5G
-    uci set wireless.`${W_IF0}.encryption='psk2'
+    uci set wireless.`${W_IF0}.encryption='psk2+ccmp'
     uci set wireless.`${W_IF0}.key=$shKey5G
+    uci set wireless.`${W_IF0}.wmm='1'
+    uci set wireless.`${W_IF0}.multicast_to_unicast='0'
+    uci set wireless.`${W_IF0}.isolate='0'
+    uci set wireless.`${W_IF0}.disassoc_low_ack='0'
+    uci set wireless.`${W_IF0}.ieee80211w='0'
     uci -q delete wireless.`${W_IF0}.disabled 2>/dev/null || true
 fi
 
 # 4. Provision 2.4 GHz Wi-Fi (radio1)
 uci -q set wireless.radio1.disabled='0' || true
 uci -q delete wireless.radio1.disabled 2>/dev/null || true
+uci -q set wireless.radio1.htmode='HT20' || true
 $chan2GUci
 if uci -q get wireless.default_radio1 >/dev/null 2>&1; then
     W_IF1="default_radio1"
@@ -437,7 +460,7 @@ for iface in `$(uci show wireless 2>/dev/null | grep "=wifi-iface" | cut -d"." -
     dev=`$(uci -q get wireless."`$iface".device 2>/dev/null || true)
     if [ "`$dev" = "radio0" ]; then
         uci -q set wireless."`$iface".ssid=$shSsid5G || true
-        uci -q set wireless."`$iface".encryption='psk2' || true
+        uci -q set wireless."`$iface".encryption='psk2+ccmp' || true
         uci -q set wireless."`$iface".key=$shKey5G || true
         uci -q delete wireless."`$iface".disabled 2>/dev/null || true
     elif [ "`$dev" = "radio1" ]; then
@@ -449,8 +472,18 @@ for iface in `$(uci show wireless 2>/dev/null | grep "=wifi-iface" | cut -d"." -
 done
 uci commit wireless
 
-# 5. Reload Network, DHCP, Wi-Fi & RTL8197FS Hardware NAT ASIC (syncing cloned eth0.1 WAN MAC to ASIC netif table)
+# 5. Persist hwnat=0 in /etc/init.d/dir842-asic (keeps ASIC router VLAN/L2 tables while preventing bridged Wi-Fi NAPT blackhole)
+if [ -f /etc/init.d/dir842-asic ]; then
+    sed -i 's|echo 1 > /sys/module/rtl819x/parameters/hwnat|echo 0 > /sys/module/rtl819x/parameters/hwnat|g' /etc/init.d/dir842-asic
+    chmod 0755 /etc/init.d/dir842-asic
+    grep -qxF '/etc/init.d/dir842-asic' /etc/sysupgrade.conf 2>/dev/null || echo '/etc/init.d/dir842-asic' >> /etc/sysupgrade.conf
+fi
+echo 0 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null || true
+echo 0 > /sys/module/rtl819x/parameters/hwnat_debug 2>/dev/null || true
+
+# 6. Reload Network, Firewall, DHCP, Wi-Fi & RTL8197FS Switch/VLAN ASIC
 /etc/init.d/network reload
+/etc/init.d/firewall reload 2>/dev/null || true
 /etc/init.d/dnsmasq reload 2>/dev/null || true
 wifi reload 2>/dev/null || true
 if [ -x /etc/init.d/dir842-asic ]; then
@@ -458,17 +491,9 @@ if [ -x /etc/init.d/dir842-asic ]; then
         sleep 2
         ip link set dev eth0.1 address $shWanMac 2>/dev/null || true
         /etc/init.d/dir842-asic restart >/dev/null 2>&1 || true
-        _i=0
-        while [ `$_i -lt 45 ]; do
-            if [ -d /sys/class/net/br-lan/brif/wlan0 ] && [ -d /sys/class/net/br-lan/brif/wlan1 ] && [ "`$(cat /sys/class/net/wlan1/operstate 2>/dev/null)" = "up" ]; then
-                break
-            fi
-            _i=`$((_i + 1))
-            sleep 1
-        done
-        sleep 5
-        ip link set dev eth0.1 address $shWanMac 2>/dev/null || true
-        /etc/init.d/dir842-asic restart >/dev/null 2>&1 || true
+        echo 0 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null || true
+        echo 0 > /sys/module/rtl819x/parameters/hwnat_debug 2>/dev/null || true
+        sync
     ) </dev/null >/dev/null 2>&1 &
 fi
 

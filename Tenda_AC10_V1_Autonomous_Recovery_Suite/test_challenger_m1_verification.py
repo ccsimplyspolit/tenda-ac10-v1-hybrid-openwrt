@@ -22,7 +22,7 @@ import subprocess
 SUITE_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SUITE_DIR)
 if not os.path.exists(os.path.join(REPO_ROOT, "offline_autonomous_tools")):
-    REPO_ROOT = r"C:\Users\sshunko\AppData\Local\Temp\tenda_ac10_public_repo"
+    REPO_ROOT = r"C:\Users\user\AppData\Local\Temp\tenda_ac10_public_repo"
     SUITE_DIR = os.path.join(REPO_ROOT, "Tenda_AC10_V1_Autonomous_Recovery_Suite")
 FIRMWARE_DIR = os.path.join(REPO_ROOT, "02_Compiled_Hybrid_OpenWrt_4.14_Firmware")
 BAT_PATH = os.path.join(SUITE_DIR, "Flash_Hybrid_OpenWrt_4.14_TFTP.bat")

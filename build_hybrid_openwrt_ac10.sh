@@ -388,18 +388,25 @@ assert "  gwr1200ac-v1)" in s
 s = s.replace("  gwr1200ac-v1)", ac10_net_case, 1)
 open(p_net, "w", encoding="utf-8").write(s)
 
-# 4. /etc/init.d/dir842-asic: support HW_NIC0_ADDR in wait_netif_mac()
+# 4. /etc/init.d/dir842-asic: support HW_NIC0_ADDR in wait_netif_mac() and keep hwnat=0 by default
+#    so bridged Wi-Fi -> WAN flows use Linux software flow_offloading without ASIC NAPT blackholing
 p_asic = os.path.join(root, "etc/init.d/dir842-asic")
 s = open(p_asic, "r", encoding="utf-8").read()
 s = s.replace(
     '*) want="" ;;',
     '*) want=$(dd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr \'\\0\' \'\\n\' | tr -d \'\\r\' | grep \'^HW_NIC0_ADDR=\' | head -n1 | cut -d= -f2 | sed \'s/../&:/g;s/:$//\' | tr \'A-F\' \'a-f\') ;;',
 )
+s = s.replace(
+    'echo 1 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null',
+    'echo 0 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null\n\t\techo 0 > /sys/module/rtl819x/parameters/hwnat_debug 2>/dev/null',
+)
 open(p_asic, "w", encoding="utf-8").write(s)
+os.chmod(p_asic, 0o755)
 
 # 5. /etc/uci-defaults/99-dir842-m5: Switch Port 3 = WAN (vlan 1), Ports 0,1,2 = LAN (vlan 2),
 #    Tenda SSID/MAC (neutral fallback 50:0f:f5:00:00:05), bind radio0 by PCIe path (immune to phy0->phy1),
-#    fail-safe HT20 default on channel 36 (VHT40/VHT80 selectable in LuCI).
+#    VHT20 default on channel 36 + country=US (23 dBm, immune to rtw88 VHT80 RF poll timeouts),
+#    software flow_offloading=1, and clean IPv4 + RFC 9462 DDR DNS defaults for iOS/macOS compatibility.
 p_m5 = os.path.join(root, "etc/uci-defaults/99-dir842-m5")
 s = open(p_m5, "r", encoding="utf-8").read()
 assert "set network.@switch_vlan[-1].ports='4 6t'" in s
@@ -426,8 +433,25 @@ if [ -n "$_ac10_phy" ]; then
 \t\tuci -q set wireless.radio0.phy="$_ac10_phy"
 \tfi
 \tuci -q delete wireless.radio0.macaddr
+\tuci -q set wireless.radio0.country='US'
+\tuci -q set wireless.radio0.channel='36'
+\tuci -q set wireless.radio0.htmode='VHT20'
 \tuci -q commit wireless
 fi
+uci -q delete network.globals.ula_prefix
+uci -q commit network
+uci -q set firewall.@defaults[0].flow_offloading='1'
+uci -q set firewall.@defaults[0].flow_offloading_hw='0'
+uci -q commit firewall
+uci -q set dhcp.@dnsmasq[0].rebind_protection='0'
+uci -q set dhcp.@dnsmasq[0].cachesize='1000'
+uci -q set dhcp.lan.ra='disabled'
+uci -q set dhcp.lan.dhcpv6='disabled'
+uci -q delete dhcp.lan.ra_slaac
+uci -q delete dhcp.lan.ra_flags
+uci -q delete dhcp.lan.dhcp_option
+uci -q add_list dhcp.lan.dhcp_option='6,1.1.1.1,8.8.8.8,192.168.0.1'
+uci -q commit dhcp
 uci -q set system.@system[0].hostname='Tenda-AC10-V1'
 uci -q set system.@system[0].dir842_m5_seeded='1'"""
 s = s.replace(
@@ -525,7 +549,11 @@ cal_snippet = """\t\techo "${phy_ifname}_phyBandSelect=1"
 \t\techo "${phy_ifname}_shortGI40M=1"
 \t\techo "${phy_ifname}_ampdu=1"
 \t\techo "${phy_ifname}_manual_edca=1"
-\t\techo "${phy_ifname}_disable_txsc=1"
+\t\techo "${phy_ifname}_disable_txsc=0"
+\t\techo "${phy_ifname}_trswitch=1"
+\t\techo "${phy_ifname}_txbf=0"
+\t\techo "${phy_ifname}_led_type=${led_type:-7}"
+\t\techo "${phy_ifname}_dtimperiod=${dtim_period:-3}"
 \t\t[ "$noscan" = "1" ] && echo "${phy_ifname}_coexist=0" """
 assert '\t\techo "${phy_ifname}_phyBandSelect=1"' in s
 assert '\t\t[ -n "$country" ] && echo "${phy_ifname}_regdomain=$country"' in s

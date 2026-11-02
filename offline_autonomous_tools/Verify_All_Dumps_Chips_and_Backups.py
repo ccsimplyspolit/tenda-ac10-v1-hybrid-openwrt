@@ -358,7 +358,7 @@ def run_all_checks() -> int:
         and "0x80001010" in guide_text,
         "tftp_flashing_guide.md documents Offline_TFTP_Recovery_and_Flash.bat, verified booter_stage2 SHA-256, Port 3 WAN PHY power-down (0x1940), and UDP-only TFTP WRQ",
     )
-    public_repo_dir = r"C:\Users\sshunko\AppData\Local\Temp\tenda_ac10_public_repo"
+    public_repo_dir = r"C:\Users\user\AppData\Local\Temp\tenda_ac10_public_repo"
     synth_dir = os.path.join(os.path.dirname(HYBRID_KIT_DIR), ".agents", "teamwork", "worker_unification_synthesizer")
     root_wf = os.path.join(os.path.dirname(HYBRID_KIT_DIR), ".github", "workflows", "build-ac10-hybrid-openwrt.yml")
     ref_dir = public_repo_dir if os.path.exists(public_repo_dir) else synth_dir
