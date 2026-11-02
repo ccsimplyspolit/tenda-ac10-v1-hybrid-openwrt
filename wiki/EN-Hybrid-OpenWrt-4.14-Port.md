@@ -18,21 +18,24 @@
 
 ---
 
-## 2. What's Fixed Out of the Box in `r2`
+## 2. Key Fixes and Architectural Improvements in `r3` (`v4.14.187-r3-ac10-hybrid`)
 
-1. **Full-Power 5 GHz `RTL8822BE` (`Skyworth SE5003L1` RFE Type 6):**
-   - Tenda left the `RTL8822BE` OTP eFuse blank (`0xFF`), causing unpatched `rtw88` to drop TX/RX by `-17 dB` (`RFE 0`) with `xtal_cap=0`. We binary-patched `rtw88_8822b.ko` ELF relocations to add `rfe_info[6]` (`rtw8822b_config_rfe_efem`, BB regs `0x82C/0x830/0x838/0x83C`), and `/bin/set-mib.sh` injects each unit's factory `HW_WLAN0_11N_XCAP` and MAC from `/dev/mtd1` on boot.
-   - Default profile is locked to **`VHT20`, Channel `36`, `23 dBm` (200 mW)** (`ifname='wlan1'` pinned by PCIe path) for zero link drops — avoiding the B-cut RF register `0x33` poll timeout seen at 80 MHz (`VHT40`/`VHT80` remain selectable in LuCI).
-2. **Simultaneous Wired + Wi-Fi Routing (`hwnat=0` + Software Flow Offloading):**
-   - Enabling `rtl819x_hwnat` (`hwnat=1`) delivers `940 Mbps` wired NAT at `0.5%` CPU, but its ASIC TLU blackholes software-bridged Wi-Fi frames crossing `br-lan` (`wlan1 -> eth0.1`). Shipping `hwnat=0` + `firewall.flow_offloading='1'` (while keeping `dir842.asic.role='router'` and `fabric_autoreset=3`) gives **~350–500 Mbps** across wired and Wi-Fi together out of the box, with 1-command `echo 1 > /sys/module/rtl819x/parameters/hwnat` available for wired-only gigabit setups.
-3. **Cold-Boot Cloned WAN MAC Sync (`wait_netif_mac`):**
+1. **Full-Power 5 GHz `RTL8822BE` with Rock-Solid `VHT80` (80 MHz):**
+   - Tenda left the `RTL8822BE` OTP eFuse blank (`0xFF`). We binary-patched `rtw88_8822b.ko` ELF relocations to add `rfe_info[6]` (`rtw8822b_config_rfe_efem`, BB regs `0x82C/0x830/0x838/0x83C`), and `/bin/set-mib.sh` injects each unit's factory `HW_WLAN0_11N_XCAP` and MAC from `/dev/mtd1` on boot.
+   - In `r3`, RF register 0x33 polling timeout was increased 10x from 100 to 1000 iterations (2 ms) at `.text+0x2EDC` and `.text+0x2F7C`, CCA threshold register `REG_L1WT` (`0x9194b2b9`) was enabled, and management/EAPOL frames were fixed to `DESC_RATE6M` (`0x04`) in `rtw88_core.ko`.
+   - Default profile is locked to **`VHT80` (80 MHz), Channel `36`, `23 dBm` (200 mW)** delivering up to 866.7 Mbps PHY with zero link drops under continuous heavy load.
+2. **Simultaneous Hardware NAT (940 Mbps) & Wi-Fi Routing (`SWTCR0 |= 0x400C` / `WANRouteMode=ToCpu`):**
+   - In `r3`, bit `WANRouteMode=ToCpu` was patched in `gw_prog` inside `vmlinux` paired with `dir842-l2flush`. Hardware NAT offloading (`hwnat=1`) delivers ~940 Mbps wired line-rate at 0.5% CPU, while simultaneously routing all Wi-Fi traffic at full speed without blackholes.
+3. **2.4 GHz Skyworks `SKY85303-11` PA/LNA Factory Calibration from `mtd1`:**
+   - `/bin/set-mib.sh` dynamically extracts factory calibration tables from `/dev/mtd1` on boot (`pwrlevelCCK_A/B`, `pwrlevelHT40_1S_A/B`, `ther`, `xcap`, `regdomain`, `trswitch`), enables hardware aggregation `ampdu=1` + `amsdu=1`, and disables `disable_txsc=1`. 2.4 GHz delivers full factory power and penetration.
+4. **Asymmetric Flow Control & Two-Stage Watchdog:**
+   - Enables RGMII asymmetric flow control `trunk_pause=3` (`PCRP0[17:16]=1`, `EXT1 0x1311 |= 0x0020 FORCE_RXPAUSE`), buffer thresholds in `SBFCR1` (`FCOFF=320, FCON=380`), and non-disruptive Stage 1 soft FIFO queue drain (<2 ms) in `rtl819x_hang_check`.
+5. **Cold-Boot Cloned WAN MAC Sync (`wait_netif_mac`):**
    - `/etc/init.d/dir842-asic` waits for both `eth0.2` (LAN) and cloned `eth0.1` (`network.wan.macaddr`) before programming `gw_prog`.
-4. **Odd WAN Port 3 & `GPIO 58` Switch Reset:**
-   - `tenda-ac10-v1.dts` binds switch reset `<&gpio1 26 GPIO_ACTIVE_LOW>` (`GPIO 58`), paired with 9 MIPS32 LE `vmlinux` patches fixing odd `Port 3` WAN PVID upper-halfword shift and L2 masks.
-5. **Apple iOS Encrypted DNS (RFC 9462 DDR) & WAN Socket Lockdown:**
+6. **Odd WAN Port 3 & `GPIO 58` Switch Reset:**
+   - `tenda-ac10-v1.dts` binds switch reset `<&gpio1 26 GPIO_ACTIVE_LOW>` (`GPIO 58`), paired with MIPS32 LE `vmlinux` patches fixing odd `Port 3` WAN PVID upper-halfword shift and L2 masks.
+7. **Apple iOS Encrypted DNS (RFC 9462 DDR) & WAN Socket Lockdown:**
    - Removed unrouted `ula_prefix` and set `dhcp_option '6,1.1.1.1,8.8.8.8,192.168.0.1'` for instant HTTP/3 QUIC DoH without iOS warnings; `uhttpd` and `dnsmasq` are isolated from `eth0.1`.
-6. **Honest 2.4 GHz Note:**
-   - 2.4 GHz uses the donor DIR-842 R1 `rtl8192cd.ko` module without `Skyworks SKY85303-11` PA tables, so 2.4 GHz range is short-room only. Use 5 GHz as your primary band.
 
 ---
 

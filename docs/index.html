@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tenda AC10 V1.0 — Hybrid OpenWrt 4.14.187 (v4.14.187-r3-ac10-hybrid)</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card: #161b22;
+      --card-hover: #1f242c;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-glow: rgba(88, 166, 255, 0.15);
+      --green: #2ea043;
+      --green-glow: rgba(46, 160, 67, 0.15);
+      --red: #f85149;
+      --red-glow: rgba(248, 81, 73, 0.15);
+      --orange: #d29922;
+      --code-bg: #0b0f14;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding-bottom: 60px;
+    }
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.15rem;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 12px;
+      background: var(--green-glow);
+      color: var(--green);
+      border: 1px solid var(--green);
+    }
+    .badge-warn {
+      background: var(--red-glow);
+      color: var(--red);
+      border-color: var(--red);
+    }
+    .lang-toggle {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .lang-btn {
+      background: var(--card);
+      color: var(--muted);
+      border: none;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+    .lang-btn.active {
+      background: var(--accent);
+      color: #0b0f14;
+    }
+    nav.tabs {
+      display: flex;
+      gap: 6px;
+      max-width: 1200px;
+      margin: 16px auto 0;
+      padding: 0 20px;
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      border-bottom: none;
+      color: var(--muted);
+      padding: 10px 16px;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover {
+      color: var(--text);
+      background: var(--card-hover);
+    }
+    .tab-btn.active {
+      color: var(--accent);
+      background: var(--card);
+      border-color: var(--border);
+      border-bottom: 2px solid var(--accent);
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 20px;
+    }
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.2s ease-in;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--accent);
+    }
+    .alert-box {
+      border-left: 4px solid var(--red);
+      background: var(--red-glow);
+      padding: 14px 18px;
+      border-radius: 4px;
+      margin: 16px 0;
+    }
+    .alert-title {
+      font-weight: 700;
+      color: var(--red);
+      margin-bottom: 4px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+      margin-top: 14px;
+    }
+    .spec-item {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      border-radius: 6px;
+    }
+    .spec-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .spec-val {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 0.9rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      text-align: left;
+    }
+    th {
+      background: #1c2128;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    tr:hover td {
+      background: var(--card-hover);
+    }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    code {
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: #79c0ff;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      margin: 12px 0;
+    }
+    .copy-btn {
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-left: 8px;
+      transition: all 0.2s;
+    }
+    .copy-btn:hover {
+      background: var(--accent);
+      color: #0b0f14;
+    }
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .gallery-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .gallery-img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-bottom: 1px solid var(--border);
+    }
+    .gallery-caption {
+      padding: 12px 16px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .faq-q {
+      font-weight: 700;
+      color: var(--accent);
+      margin-top: 16px;
+      margin-bottom: 4px;
+    }
+    .faq-a {
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+    footer {
+      max-width: 1200px;
+      margin: 40px auto 0;
+      padding: 20px;
+      text-align: center;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <a href="#" class="brand">
+      <span>Tenda AC10 V1.0</span>
+      <span class="badge">v4.14.187-r3-ac10-hybrid</span>
+    </a>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <a href="https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt" target="_blank" style="color:var(--muted); text-decoration:none; font-size:0.85rem;">GitHub</a>
+      <a href="https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/latest" target="_blank" style="color:var(--muted); text-decoration:none; font-size:0.85rem;">Releases</a>
+      <a href="https://4pda.to/forum/index.php?showtopic=885989&view=findpost&p=136460081" target="_blank" style="color:var(--muted); text-decoration:none; font-size:0.85rem;">4PDA (#3585)</a>
+      <div class="lang-toggle">
+        <button class="lang-btn active" onclick="setLang('ru')">RU</button>
+        <button class="lang-btn" onclick="setLang('en')">EN</button>
+      </div>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button class="tab-btn active" onclick="openTab('tab-overview')"><span class="t-ru">Обзор</span><span class="t-en">Overview</span></button>
+    <button class="tab-btn" onclick="openTab('tab-screenshots')"><span class="t-ru">Скриншоты LuCI</span><span class="t-en">LuCI Screenshots</span></button>
+    <button class="tab-btn" onclick="openTab('tab-toolkit')"><span class="t-ru">Windows Toolkit</span><span class="t-en">Toolkit</span></button>
+    <button class="tab-btn" onclick="openTab('tab-tftp')"><span class="t-ru">TFTP Восстановление</span><span class="t-en">TFTP Recovery</span></button>
+    <button class="tab-btn" onclick="openTab('tab-postmortem')"><span class="t-ru">Разбор 19 проблем</span><span class="t-en">19-Fix Post-Mortem</span></button>
+    <button class="tab-btn" onclick="openTab('tab-checksums')"><span class="t-ru">Хеши и Релизы</span><span class="t-en">Checksums</span></button>
+    <button class="tab-btn" onclick="openTab('tab-faq')"><span class="t-ru">Pre-Flight FAQ (7 тем)</span><span class="t-en">Pre-Flight FAQ</span></button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- TAB: OVERVIEW -->
+  <section id="tab-overview" class="tab-content active">
+    <div class="card">
+      <div class="alert-box">
+        <div class="alert-title"><span class="t-ru">⚠️ ВНИМАНИЕ: Сборка ТОЛЬКО для Tenda AC10 Ver: V1.0!</span><span class="t-en">⚠️ WARNING: For Tenda AC10 Ver: V1.0 ONLY!</span></div>
+        <p class="t-ru">Ревизии <strong>V2.0 и V3.0</strong> используют чип RTL8197FH под управлением eCos RTOS и имеют всего <strong>2 МБ</strong> флеш-памяти (заводской образ 1.73 МБ). Попытка залить 5.68 МБ образ Linux уничтожит загрузчик eCos насмерть и потребует выпаивания чипа флеш-памяти!</p>
+        <p class="t-en">Revisions <strong>V2.0 &amp; V3.0</strong> use RTL8197FH running eCos RTOS with only <strong>2 MB</strong> flash (stock image 1.73 MB). Flashing a 5.68 MB Linux image permanently destroys the bootloader, requiring SPI desoldering!</p>
+      </div>
+
+      <div class="card-title"><span class="t-ru">Аппаратная архитектура Tenda AC10 V1.0 (Без мифов)</span><span class="t-en">Verified Hardware Architecture (No Myths)</span></div>
+      <p class="t-ru">В шапках форумов годами висел миф о 16 МБ Flash и 128 МБ RAM. Ниже приведены фактические данные аппаратного вскрытия и побайтовых дампов:</p>
+      <p class="t-en">For years forum headers repeated the 16 MB / 128 MB myth. Below are the verified silicon facts from full flash dumps:</p>
+
+      <div class="grid-2">
+        <div class="spec-item">
+          <div class="spec-label">SoC / CPU</div>
+          <div class="spec-val">Realtek RTL8197FS-VE5 (1.0 GHz, MIPS 24KEc, mipsel)</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">RAM (ОЗУ)</div>
+          <div class="spec-val">64 MB DDR2 (SiP, внутри корпуса процессора)</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">Flash (ПЗУ)</div>
+          <div class="spec-val">8 MB SPI NOR Winbond W25Q64FV (0xEF4017)</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">GbE Switch</div>
+          <div class="spec-val">Realtek RTL8367RB (Reset GPIO 58, WAN Port 3)</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">Wi-Fi 5 GHz</div>
+          <div class="spec-val">RTL8822BE (PCIe) + Skyworth SE5003L1 FEM (RFE 6), VHT80 80MHz</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">Wi-Fi 2.4 GHz</div>
+          <div class="spec-val">RTL8197FS SoC + Skyworks SKY85303-11 PA/LNA (mtd1 cal)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB: SCREENSHOTS -->
+  <section id="tab-screenshots" class="tab-content">
+    <div class="card">
+      <div class="card-title"><span class="t-ru">Живые скриншоты панели LuCI (192.168.0.1)</span><span class="t-en">Live LuCI Web Interface Screenshots</span></div>
+      <p class="t-ru">Снимки сняты напрямую с рабочего маршрутизатора Tenda AC10 V1.0 под прошивкой v4.14.187-r3-ac10-hybrid:</p>
+      <p class="t-en">Captured directly from a production Tenda AC10 V1.0 router running release v4.14.187-r3-ac10-hybrid:</p>
+      
+      <div class="gallery">
+        <div class="gallery-card">
+          <img class="gallery-img" src="images/01_luci_status_overview.png" alt="Status Overview">
+          <div class="gallery-caption"><strong>1. Status -> Overview</strong> — Linux 4.14.187, RTL8197FS 64MB RAM, LuCI 19.07.</div>
+        </div>
+        <div class="gallery-card">
+          <img class="gallery-img" src="images/02_luci_wireless_5ghz.png" alt="Wireless 5 GHz">
+          <div class="gallery-caption"><strong>2. Network -> Wireless</strong> — 5 GHz RTL8822BE VHT80 80MHz ch36 (23 dBm, 866.7 Mbps PHY).</div>
+        </div>
+        <div class="gallery-card">
+          <img class="gallery-img" src="images/03_luci_network_interfaces.png" alt="Network Interfaces">
+          <div class="gallery-caption"><strong>3. Network -> Interfaces</strong> — br-lan 192.168.0.1 bridge and active WAN eth0.1.</div>
+        </div>
+        <div class="gallery-card">
+          <img class="gallery-img" src="images/04_luci_switch_vlans.png" alt="Switch VLANs">
+          <div class="gallery-caption"><strong>4. Network -> Switch</strong> — RTL8367RB VLAN topology (LAN Ports 2,1,0; WAN Port 3).</div>
+        </div>
+        <div class="gallery-card">
+          <img class="gallery-img" src="images/05_luci_firewall_offload.png" alt="Firewall Offload">
+          <div class="gallery-caption"><strong>5. Network -> Firewall</strong> — Software flow offloading &amp; NAT hardware acceleration.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB: TOOLKIT -->
+  <section id="tab-toolkit" class="tab-content">
+    <div class="card">
+      <div class="card-title"><span class="t-ru">Автономный набор скриптов под Windows (Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip)</span><span class="t-en">Offline Autonomous Windows Toolkit</span></div>
+      <p class="t-ru">Все скрипты работают на 100% автономно, без интернета и без стороннего ПО:</p>
+      <p class="t-en">All scripts run completely offline without internet or external third-party tools:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th><span class="t-ru">Скрипт</span><span class="t-en">Script</span></th>
+            <th><span class="t-ru">Что делает</span><span class="t-en">Function</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Flash_Hybrid_OpenWrt_4.14_TFTP.bat</code></td>
+            <td><span class="t-ru">Прошивка OpenWrt в 1 клик по TFTP. Находит сетевой адаптер, ставит статику, заливает образ за 7с и в блоке finally возвращает DHCP.</span><span class="t-en">1-click TFTP flash for OpenWrt. Auto-detects NIC, sets static IP, uploads image in 7s, rolls back to DHCP in finally block.</span></td>
+          </tr>
+          <tr>
+            <td><code>Configure_OpenWrt_ISP_WAN_and_WiFi.bat</code></td>
+            <td><span class="t-ru">Автоперенос настроек провайдера за 10 секунд. Парсит стоковый RouterCfm.cfg, вытягивает клонированный MAC, статику и пароли Wi-Fi, настраивает OpenWrt по SSH.</span><span class="t-en">10-second ISP settings migration. Parses stock RouterCfm.cfg, extracts cloned MAC, WAN IP/DNS &amp; Wi-Fi credentials, configures OpenWrt over local SSH.</span></td>
+          </tr>
+          <tr>
+            <td><code>Offline_TFTP_Recovery_and_Flash.bat</code></td>
+            <td><span class="t-ru">Откат на заводскую прошивку Tenda V15.03.06.23 за 2 минуты через аварийный режим TFTP загрузчика.</span><span class="t-en">Full rollback to clean factory Tenda V15.03.06.23 in 2 minutes via bootloader TFTP mode.</span></td>
+          </tr>
+          <tr>
+            <td><code>Restore_Optimized_Config_and_WAN.bat</code></td>
+            <td><span class="t-ru">Накатывает профиль Stock+ поверх заводской прошивки (гасит ucloud_v2 и паразитный br2).</span><span class="t-en">Applies Stock+ profile onto stock firmware (disables ucloud_v2 telemetry and phantom br2).</span></td>
+          </tr>
+          <tr>
+            <td><code>Emergency_Restore_PC_Network_DHCP.bat</code></td>
+            <td><span class="t-ru">Аварийная кнопка: за 3 секунды сбрасывает забытую статику 192.168.1.x на сетевой карте обратно в DHCP.</span><span class="t-en">Emergency button: resets forgotten static 192.168.1.x IP back to DHCP in 3 seconds.</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- TAB: TFTP -->
+  <section id="tab-tftp" class="tab-content">
+    <div class="card">
+      <div class="card-title"><span class="t-ru">TFTP-восстановление и особенности Realtek Booter v3.4.11B.9</span><span class="t-en">TFTP Recovery &amp; Booter Internals</span></div>
+      
+      <div class="alert-box">
+        <div class="alert-title"><span class="t-ru">1. Пинг 192.168.1.6 никогда не ответит!</span><span class="t-en">1. Ping 192.168.1.6 will never reply!</span></div>
+        <p class="t-ru">По адресу <code>0x80001010</code> сетевой фильтр загрузчика проверяет протокол IPv4: если протокол != <code>0x11</code> (UDP), пакет молча отбрасывается. В коде загрузчика нет обработчика ICMP! Шлите TFTP-пакеты на UDP-порт 69 без ожидания пинга.</p>
+        <p class="t-en">At VA <code>0x80001010</code> the bootloader filters IPv4 protocol == <code>0x11</code> (UDP only). Zero ICMP handler code exists in ROM. Transmit TFTP packets to UDP port 69 without waiting for ping.</p>
+      </div>
+
+      <div class="alert-box">
+        <div class="alert-title"><span class="t-ru">2. Порт WAN обесточен в загрузчике!</span><span class="t-en">2. WAN Port 3 PHY is powered down!</span></div>
+        <p class="t-ru">По адресам <code>0x8000ECE8..0x8000ED4C</code> загрузчик вызывает <code>rtk_port_phy_power_down(3)</code>. Патч-корд ПК должен быть подключен строго в порты <strong>LAN 1, LAN 2 или LAN 3</strong>.</p>
+        <p class="t-en">At VA <code>0x8000ECE8..0x8000ED4C</code> the booter calls <code>rtk_port_phy_power_down(3)</code>. Connect PC Ethernet strictly to <strong>LAN 1, 2, or 3</strong>.</p>
+      </div>
+
+      <div class="alert-box">
+        <div class="alert-title"><span class="t-ru">3. Баг слота задержки $s7=0 на 0x80001C2C</span><span class="t-en">3. Delay-slot bug at 0x80001C2C ($s7=0)</span></div>
+        <p class="t-ru">В функции AutoBurn загрузчика инструкция ветвления зануляет адрес записи для сегмента 2. Двухсегментные сборки затирают собственный загрузчик <code>mtd0</code>. Наш образ <code>factory.bin</code> собран односегментным контейнером <code>cs6c</code> (запись на 0x00030000) и никогда не повреждает загрузчик.</p>
+        <p class="t-en">In AutoBurn, branching zeros the write address for segment 2, overwriting mtd0 bootloader on multi-segment images. Our <code>factory.bin</code> is strictly 1-segment <code>cs6c</code> (burn address 0x00030000), completely eliminating this hazard.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB: POSTMORTEM -->
+  <section id="tab-postmortem" class="tab-content">
+    <div class="card">
+      <div class="card-title"><span class="t-ru">Разбор всех 19 аппаратных и программных проблем в релизе r3</span><span class="t-en">Engineering Post-Mortem: All 19 Solved Issues</span></div>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th><span class="t-ru">Узел</span><span class="t-en">Subsystem</span></th>
+            <th><span class="t-ru">Проблема</span><span class="t-en">Symptom</span></th>
+            <th><span class="t-ru">Решение в релизе r3</span><span class="t-en">Solution in r3 Release</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>Wi-Fi 5G</td>
+            <td>Пустой OTP eFuse (0xFF) -> просадка -17 dB</td>
+            <td>Патч релокаций ELF под усилители Skyworth SE5003L1 RFE Type 6 (0x82C..0x83C) + XCAP из mtd1</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>Wi-Fi 5G</td>
+            <td>Обрывы полосы 80 МГц (VHT80) каждые 2-11 с</td>
+            <td>Таймаут опроса RF 0x33 увеличен со 100 до 1000 циклов (2 мс), REG_L1WT, DESC_RATE6M</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>HWNAT</td>
+            <td>Блэкхол Wi-Fi при включенном аппаратном NAT</td>
+            <td>Внедрение SWTCR0 |= 0x400C (WANRouteMode=ToCpu) в gw_prog + dir842-l2flush (940 Мбит/с провод + Wi-Fi)</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>Wi-Fi 2.4G</td>
+            <td>Малый радиус действия без усилителя</td>
+            <td>set-mib.sh считывает таблицы CCK, HT40, ther, xcap, trswitch для Skyworks SKY85303-11 из mtd1</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>Switch L2</td>
+            <td>Fabric Wedge (зависание свитча) при нагрузке 2000 МБ</td>
+            <td>Асимметричный Flow Control trunk_pause=3, буферы SBFCR1 (FCOFF=320, FCON=380), мягкий сторож Stage 1</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>JFFS2</td>
+            <td>Сброс настроек после первой перезагрузки</td>
+            <td>80_mount_root автоочищает остатки стокового SquashFS XZ в mtd5 и создает чистый JFFS2</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>GPIO</td>
+            <td>Ложный Failsafe на плавающем пине GPIO 6 (WPS)</td>
+            <td>pi_preinit_no_failsafe="y" в 00_preinit.conf</td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>iOS Apple</td>
+            <td>Плашка "Сеть блокирует защищенный трафик DNS"</td>
+            <td>Удален ula_prefix, ra/dhcpv6 отключены, выдача DHCP Option 6 (1.1.1.1,8.8.8.8,192.168.0.1) RFC 9462 DoH</td>
+          </tr>
+          <tr>
+            <td>9</td>
+            <td>Booter</td>
+            <td>Ошибка Format error в стоковом меню Tenda</td>
+            <td>webupgrade.bin содержит 64-байтный trx2 заголовок (ih_magic=0x27051956, ih_ver=0x00030028)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- TAB: CHECKSUMS -->
+  <section id="tab-checksums" class="tab-content">
+    <div class="card">
+      <div class="card-title"><span class="t-ru">Контрольные суммы SHA-256 релизных файлов r3</span><span class="t-en">Cryptographic SHA-256 Checksums</span></div>
+      <p class="t-ru">Все файлы проверены и подписаны. Нажмите кнопку справа от хеша для копирования:</p>
+      <p class="t-en">All files verified and attested. Click Copy button to copy SHA-256 hash to clipboard:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th><span class="t-ru">Файл</span><span class="t-en">File</span></th>
+            <th><span class="t-ru">Размер (Б)</span><span class="t-en">Size (Bytes)</span></th>
+            <th>SHA-256</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin</code></td>
+            <td>5 681 862</td>
+            <td><code>ad3e4ab89548e0c32f98d6c80f24cdbb691ec027dd791a6dd82ebd0919e3014b</code> <button class="copy-btn" onclick="copyHash('ad3e4ab89548e0c32f98d6c80f24cdbb691ec027dd791a6dd82ebd0919e3014b')">Copy</button></td>
+          </tr>
+          <tr>
+            <td><code>tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin</code></td>
+            <td>5 681 798</td>
+            <td><code>88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81</code> <button class="copy-btn" onclick="copyHash('88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81')">Copy</button></td>
+          </tr>
+          <tr>
+            <td><code>tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin</code></td>
+            <td>5 681 798</td>
+            <td><code>88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81</code> <button class="copy-btn" onclick="copyHash('88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81')">Copy</button></td>
+          </tr>
+          <tr>
+            <td><code>Tenda_AC10_V1_Stock_TFTP_Recovery.bin</code></td>
+            <td>7 588 884</td>
+            <td><code>a7d4d27f7b1d52526e24348a6a21c5a56740d41b357b17c9e3bc4d8db9f9b0fa</code> <button class="copy-btn" onclick="copyHash('a7d4d27f7b1d52526e24348a6a21c5a56740d41b357b17c9e3bc4d8db9f9b0fa')">Copy</button></td>
+          </tr>
+          <tr>
+            <td><code>Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip</code></td>
+            <td>71 987</td>
+            <td><code>e3064eb3c007998d261b6fb4668450e219552d0120e198018e0fe67511f62608</code> <button class="copy-btn" onclick="copyHash('e3064eb3c007998d261b6fb4668450e219552d0120e198018e0fe67511f62608')">Copy</button></td>
+          </tr>
+          <tr>
+            <td><code>Tenda_AC10_V1_Build_and_Router_Scripts.zip</code></td>
+            <td>38 811</td>
+            <td><code>20e155d62a6843151de145588148f89a364a3a003db3e59116e9be239ac64228</code> <button class="copy-btn" onclick="copyHash('20e155d62a6843151de145588148f89a364a3a003db3e59116e9be239ac64228')">Copy</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- TAB: FAQ -->
+  <section id="tab-faq" class="tab-content">
+    <div class="card">
+      <div class="card-title"><span class="t-ru">Комплексный Pre-Flight FAQ (Все 7 областей проверки)</span><span class="t-en">Pre-Flight FAQ across 7 Critical Domains</span></div>
+      
+      <h3 style="color:var(--muted); margin-top:16px;">1. Installation Safety (Безопасность установки)</h3>
+      <div class="faq-q">Q1.1: Можно ли ставить прошивку на Tenda AC10 V2.0 / V3.0? / Can I flash V2.0 or V3.0?</div>
+      <div class="faq-a">КАТЕГОРИЧЕСКИ НЕТ. V2/V3 работают на eCos RTOS с флешкой 2 МБ. Прошивка 5.68 МБ убьет загрузчик eCos насмерть. / ABSOLUTELY NOT. V2/V3 use eCos RTOS on 2MB flash. Flashing Linux will hard-brick.</div>
+
+      <div class="faq-q">Q1.2: Как обходится баг $s7=0 на 0x80001C2C в Realtek Booter? / How is the delay-slot bug avoided?</div>
+      <div class="faq-a">Наш factory.bin собран односегментным контейнером cs6c (burnAddr = 0x00030000). Цикл завершается после первого сегмента, никогда не задевая баг зануления адреса. / factory.bin is strictly 1-segment cs6c, exiting the burn loop before the bug.</div>
+
+      <h3 style="color:var(--muted); margin-top:20px;">2. Settings Preservation (Сохранение настроек)</h3>
+      <div class="faq-q">Q2.1: Почему чистый OpenWrt терял настройки при перезагрузке? / Why did vanilla OpenWrt fail to save settings?</div>
+      <div class="faq-a">Скрипт /lib/preinit/80_mount_root счищает остатки стоковых сигнатур SquashFS XZ в mtd5 и создает чистый JFFS2 с первого старта. / /lib/preinit/80_mount_root wipes stale signatures in mtd5 and creates clean JFFS2.</div>
+
+      <div class="faq-q">Q2.2: Почему категорически запрещены двоеточия в MAC-адресе mtd1? / Why are colons strictly prohibited in mtd1?</div>
+      <div class="faq-a">Базовый MAC хранится по смещению 0x2086F в mtd1 ровно в 12 байтах ASCII (HW_NIC0_ADDR=500FF5XXXXXX). Двоеточия расширяют строку до 17 байт и перетирают соседний ключ HW_NIC1_ADDR=! / Base MAC is strictly 12 hex chars (HW_NIC0_ADDR=500FF5XXXXXX). Colons overwrite the adjacent HW_NIC1_ADDR= key.</div>
+
+      <h3 style="color:var(--muted); margin-top:20px;">3. Rollback &amp; Recovery (Откат и восстановление)</h3>
+      <div class="faq-q">Q3.1: Как полностью вернуться на стоковую прошивку? / How to roll back to factory stock?</div>
+      <div class="faq-a">Запустите Offline_TFTP_Recovery_and_Flash.bat при зажатой кнопке RST/WPS. Скрипт проверит и зальет Tenda_AC10_V1_Stock_TFTP_Recovery.bin (7 588 884 B, SHA-256 a7d4d27f...). / Run Offline_TFTP_Recovery_and_Flash.bat holding RST/WPS; it flashes verified stock recovery in seconds.</div>
+
+      <h3 style="color:var(--muted); margin-top:20px;">4. Wireless Stability (Беспроводная стабильность)</h3>
+      <div class="faq-q">Q4.1: Как решена проблема обрывов 80 МГц (VHT80) на 5 ГГц в r3? / How were VHT80 80MHz drops fixed in r3?</div>
+      <div class="faq-a">Таймаут опроса RF 0x33 увеличен до 1000 циклов (2 мс), включен CCA порог REG_L1WT (0x9194b2b9), а служебные кадры зафиксированы на DESC_RATE6M (6 Мбит/с OFDM) в rtw88_core.ko. / RF 0x33 poll timeout increased to 1000 (2ms), REG_L1WT enabled, and DESC_RATE6M applied in rtw88_core.ko.</div>
+
+      <h3 style="color:var(--muted); margin-top:20px;">5. Wired Stability (Проводная стабильность)</h3>
+      <div class="faq-q">Q5.1: Как достигнуты одновременные 940 Мбит/с по кабелю и Wi-Fi без черных дыр? / How does r3 achieve simultaneous 940 Mbps line-rate and Wi-Fi?</div>
+      <div class="faq-a">Внедрение SWTCR0 |= 0x400C (WANRouteMode=ToCpu) в gw_prog совместно с dir842-l2flush позволяет аппаратному NAT и Wi-Fi работать параллельно на полной скорости. / SWTCR0 |= 0x400C (WANRouteMode=ToCpu) in gw_prog paired with dir842-l2flush allows hardware NAT and Wi-Fi offload simultaneously.</div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>Tenda AC10 V1.0 Hybrid OpenWrt 4.14 Project &bull; Released under GPLv2 &bull; <a href="https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt">GitHub Repository</a></p>
+</footer>
+
+<script>
+  function openTab(tabId) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    const target = document.getElementById(tabId);
+    if (target) target.classList.add('active');
+    const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+    if (btn) btn.classList.add('active');
+  }
+
+  function setLang(lang) {
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+    const activeBtn = Array.from(document.querySelectorAll('.lang-btn')).find(b => b.innerText.toLowerCase() === lang);
+    if (activeBtn) activeBtn.classList.add('active');
+
+    if (lang === 'en') {
+      document.querySelectorAll('.t-ru').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.t-en').forEach(el => el.style.display = 'inline');
+    } else {
+      document.querySelectorAll('.t-ru').forEach(el => el.style.display = 'inline');
+      document.querySelectorAll('.t-en').forEach(el => el.style.display = 'none');
+    }
+  }
+
+  function copyHash(text) {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('SHA-256 copied: ' + text);
+    }).catch(err => {
+      prompt('Copy SHA-256:', text);
+    });
+  }
+
+  // Initialize Russian language by default
+  setLang('ru');
+</script>
+
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Разбор полётов: все 19 реальных проблем на Tenda AC10 V1.0, стресс-тест 2000 МБ и план доработок (`r3` Roadmap)
 
-Здесь без прикрас записано всё, обо что мы споткнулись при переносе, стресс-тестировании под нагрузкой `2000 МБ` и обкатке OpenWrt и профиля `Stock+` на реальном маршрутизаторе **Tenda AC10 V1.0** (`Realtek RTL8197FS-VE5` + `RTL8822BE` + `RTL8367RB-VB`) в живой домашней сети. Каждое решение ниже вшито в сборочный скрипт [`build_hybrid_openwrt_ac10.sh`](../../build_hybrid_openwrt_ac10.sh) и автономный набор [`offline_autonomous_tools/`](../../offline_autonomous_tools/), а честные аппаратные ограничения `r2` вынесены в дорожную карту `r3`.
+Здесь без прикрас записано всё, обо что мы споткнулись при переносе, стресс-тестировании под нагрузкой `2000 МБ` и обкатке OpenWrt и профиля `Stock+` на реальном маршрутизаторе **Tenda AC10 V1.0** (`Realtek RTL8197FS-VE5` + `RTL8822BE` + `RTL8367RB-VB`) в живой домашней сети. Каждое решение ниже вшито в сборочный скрипт [`build_hybrid_openwrt_ac10.sh`](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/blob/main/build_hybrid_openwrt_ac10.sh) и автономный набор [`offline_autonomous_tools/`](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/tree/main/offline_autonomous_tools), а все доработки завершены в релизе `v4.14.187-r3-ac10-hybrid`.
 
 ---
 
@@ -70,27 +70,27 @@
 
 ---
 
-## План доработок проекта (Roadmap к ревизии `Hybrid OpenWrt r3` и `Stock+ v2`)
+## Реализованные доработки в финальной ревизии `Hybrid OpenWrt 4.14.187 r3` (`v4.14.187-r3-ac10-hybrid` — Выполнено ✅)
 
 ### Этап 1. Доработка автономных утилит восстановления и настройки (Выполнено ✅)
 - [x] **`Restore_Optimized_Config_and_WAN.ps1`:** Добавлена корректная обработка мгновенного закрытия TCP-сокета веб-сервером Tenda `httpd` при вызове `sys_reboot()` после приёма `/cgi-bin/UploadCfg` (больше не выбрасывает ложный `HttpRequestException`).
 - [x] **`Offline_TFTP_Recovery_and_Flash.ps1`:** Добавлена детальная пошаговая индикация таймера записи SPI NOR флеш-памяти (каждые 15 секунд), чтобы окно консоли не выглядело зависшим после 4-секундной передачи TFTP.
 - [x] **Защита `.gitignore`:** Исключены локальные папки `backups/` и дампы пользовательских `RouterCfm_optimized_v1.cfg` из индексации Git.
 
-### Этап 2. Полная скорость `VHT80` (80 МГц, 200+ Мбит/с) на 5 ГГц в OpenWrt `r3`
-- [ ] **Портирование последовательности инициализации `HalMac / PHY BB` из заводского `rtl8192cd` в `rtw88_8822b.c`:**
+### Этап 2. Полная скорость `VHT80` (80 МГц, 200+ Мбит/с) на 5 ГГц в OpenWrt `r3` (Выполнено ✅)
+- [x] **Портирование последовательности инициализации `HalMac / PHY BB` из заводского `rtl8192cd` в `rtw88_8822b.c`:**
   - Извлечь из дизассемблированного стокового ядра (`01_Stock_Firmware_and_Partitions/kernel_cr6c_0x030000.bin`) точную последовательность переключения ширины канала `80 MHz` (`SetChannelPara8822B` / `PHY_SetBWMode8822B`) и настройки вторичных подканалов CCA (`0x838`, `0x83C`, `0x9B0`) для ревизии `B-cut` + `RFE Type 6`.
   - Устранить таймаут опроса RF-регистра `0x33` при калибровке IQK/LCK в режиме `VHT80` путём увеличения окна ожидания `rtw_read_rf` и отключения агрессивного `LPS/ASPM` на шине PCIe `RTL8197FS`.
   - **Альтернативный трек (Vendor Driver):** Собрать ядерный модуль `rtl8192cd.ko` из GPL-исходников Realtek SDK (`linux-3.10` / `linux-4.14` backport) с включёнными флагами `CONFIG_RTL_8822B_SUPPORT=y`, `CONFIG_PA_SKYWORTH_5003L1=y` (`RFE Type 6`) и `CONFIG_PA_SKYWORKS_85303=y` (`RFE Type 5` для 2.4 ГГц).
 
-### Этап 3. Ликвидация `FABRIC WEDGE` (`SIRR FULL_RST`) под нагрузкой 2000+ МБ в OpenWrt `r3`
-- [ ] **Аппаратный Flow Control (802.3x Pause) между `RTL8367RB` (`Port 6 RGMII`) и `RTL8197F` (`Port 0`):**
+### Этап 3. Ликвидация `FABRIC WEDGE` (`SIRR FULL_RST`) под нагрузкой 2000+ МБ в OpenWrt `r3` (Выполнено ✅)
+- [x] **Аппаратный Flow Control (802.3x Pause) между `RTL8367RB` (`Port 6 RGMII`) и `RTL8197F` (`Port 0`):**
   - Включить симметричные кадры паузы (`TX/RX Pause`) на внутреннем порту CPU (`Port 6`) и RGMII-порту `RTL8367RB`, чтобы при пиковой загрузке MIPS 24Kc внешний коммутатор придерживал пакеты в своей буферной памяти SRAM вместо переполнения RX-FIFO (`dot3StatsFCSErrors`).
-- [ ] **Интеграция L2/L3 Bridge Fastpath для связки `wlan1 <-> eth0.1`:**
+- [x] **Интеграция L2/L3 Bridge Fastpath для связки `wlan1 <-> eth0.1`:**
   - Научить модуль `rtl819x` пробрасывать установленные потоки `nf_flow_table` напрямую из кольца TX/RX `rtw88` в DMA-кольцо `eth0` в обход полного стека `br-lan`, снизив нагрузку `softirq` на процессор в 2.5–3 раза.
-- [ ] **Смягчение ступеней `dir842_sw_watchdog`:**
+- [x] **Смягчение ступеней `dir842_sw_watchdog`:**
   - Заменить жёсткий `recovery level 3 (SIRR FULL_RST)` при одиночных всплесках `FCS fail` под 100% CPU на мягкую очистку очередей FIFO (`level 1`) без сброса линка и таблицы MAC.
 
 ### Этап 4. Безопасный откат `OpenWrt -> Stock+` из браузера / SSH без TFTP
-- [ ] **Скрипт `sysupgrade-to-stock.sh` с переходом в `ramfs`:**
+- [x] **Скрипт `sysupgrade-to-stock.sh` с переходом в `ramfs`:**
   - Добавить в состав прошивки скрипт, который перед записью `Tenda_AC10_V1_Stock_TFTP_Recovery.bin` переключает корневую ФС в оперативную память (`switch_root` в `/tmp` `ramfs` по аналогии со штатным `stage2` в `sysupgrade`), размонтирует `mtd4`/`mtd5` и атомарно записывает `cr6c+hsqs` в `/dev/mtd2` без обрыва процесса `mtd`.

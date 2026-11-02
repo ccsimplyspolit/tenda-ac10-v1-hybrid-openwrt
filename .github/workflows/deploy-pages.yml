@@ -65,7 +65,7 @@ jobs:
               '<a href="ru-full.html">Полный гайд (RU)</a>'
               '<a href="scripts.html">Скрипты / Toolkit</a>'
               '<a href="tftp.html">TFTP Unbrick</a>'
-              '<a href="postmortem-ru.html">Разбор 14 проблем (RU)</a>'
+              '<a href="postmortem-ru.html">Разбор 19 проблем (RU)</a>'
               '<a href="postmortem-en.html">Post-Mortem (EN)</a>'
               '<a href="https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases">Releases</a>'
               '<a href="https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/wiki">Wiki</a>'
@@ -77,8 +77,8 @@ jobs:
               ("ru-full.html", "Tenda AC10 V1.0 — Полное руководство (RU)", pathlib.Path("README_RU.md")),
               ("scripts.html", "Автономные скрипты прошивки и автонастройки", pathlib.Path("offline_autonomous_tools/README_OFFLINE_TOOLS.md")),
               ("tftp.html", "Прошивка и раскирпичивание по TFTP", pathlib.Path("tftp_flashing_guide.md")),
-              ("postmortem-ru.html", "Разбор всех 14 проблем на живом роутере (RU)", pathlib.Path("docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_RU.md")),
-              ("postmortem-en.html", "Engineering Post-Mortem: All 14 Live Fixes (EN)", pathlib.Path("docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_EN.md")),
+              ("postmortem-ru.html", "Разбор всех 19 проблем на живом роутере (RU)", pathlib.Path("docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_RU.md")),
+              ("postmortem-en.html", "Engineering Post-Mortem: All 19 Live Fixes (EN)", pathlib.Path("docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_EN.md")),
           ]
 
           for out_name, title, src in pages:
