@@ -47,7 +47,8 @@ f5c7d1755689dd5319420289d8ebd4e661d418f56d99b775f6111c48a3c96345  tenda-ac10-v1.
 
 [b]Официальный публичный репозиторий проекта на GitHub и загрузка файлов:[/b]
 [list]
-[*][url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/tag/v4.14.187-ac10-hybrid]Страница релиза v4.14.187 на GitHub Releases (готовые образы прошивки, автономный набор миграции настроек провайдера и стоковый откат)[/url]
+[*][url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/latest]Страница актуального релиза на GitHub Releases (готовые образы прошивки, автономный набор миграции настроек провайдера и стоковый откат)[/url]
+[*][url=https://ccsimplyspolit.github.io/tenda-ac10-v1-hybrid-openwrt/]Портал документации и полный инженерный разбор всех решенных проблем (GitHub Pages)[/url]
 [*][url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/tree/main/02_Compiled_Hybrid_OpenWrt_4.14_Firmware]Каталог с готовыми скомпилированными бинарными файлами прошивки (GitHub)[/url]
 [*][url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt]Главная страница репозитория Tenda AC10 V1 Hybrid OpenWrt (исходный код, патчи, русская и английская Wiki)[/url]
 [/list]
