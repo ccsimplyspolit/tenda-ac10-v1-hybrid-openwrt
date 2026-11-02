@@ -61,8 +61,8 @@ PROVISION_PS1 = os.path.join(SCRIPT_DIR, "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1
 LIVE_LOG_PATH = os.path.join(KIT_ROOT, "post_flash_live_log.txt")
 REPORT_JSON_PATH = os.path.join(KIT_ROOT, "post_flash_verification_report.json")
 
-EXPECTED_FW_SIZE = 5546694
-EXPECTED_FW_SHA256 = "a6680ca93880cf951fc25813dcd5925077c0cfde1672edb64cb3cd2ff6c4b1cd"
+EXPECTED_FW_SIZE = 5681862
+EXPECTED_FW_SHA256 = "ad3e4ab89548e0c32f98d6c80f24cdbb691ec027dd791a6dd82ebd0919e3014b"
 ROUTER_IP = "192.168.0.1"
 SSH_PORT = 22
 INTERFACE_ALIAS = "Ethernet"

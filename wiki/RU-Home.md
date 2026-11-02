@@ -9,7 +9,7 @@
 
 ---
 
-## Живой интерфейс LuCI (`v4.14.187-r2-ac10-hybrid`)
+## Живой интерфейс LuCI (`v4.14.187-r3-ac10-hybrid`)
 
 ![LuCI Overview](https://raw.githubusercontent.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/main/docs/images/01_luci_status_overview.png)
 

@@ -9,7 +9,7 @@ Practical hardware notes, **Hybrid OpenWrt 4.14.187** firmware (`LuCI` at `192.1
 
 ---
 
-## Live LuCI Interface (`v4.14.187-r2-ac10-hybrid`)
+## Live LuCI Interface (`v4.14.187-r3-ac10-hybrid`)
 
 ![LuCI Overview](https://raw.githubusercontent.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/main/docs/images/01_luci_status_overview.png)
 

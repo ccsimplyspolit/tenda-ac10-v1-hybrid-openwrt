@@ -105,7 +105,7 @@ dtb_off = 0x5335BC
 assert vm_dtb[dtb_off:dtb_off+4] == b"\xd0\x0d\xfe\xed", "DTB magic not at 0x5335BC"
 vmlinux = vm_dtb[:dtb_off]
 
-# Apply 9 verified MIPS32 LE binary patches for Tenda AC10 V1.0 Switch/VLAN/ASIC Port Map:
+# Apply 34 verified MIPS32 LE binary patches for Tenda AC10 V1.0 Switch/VLAN/ASIC Port Map & Datapath:
 # Physical WAN = Switch Port 3 (mask 0x08), Physical LAN1..LAN3 = Switch Ports 2,1,0 (mask 0x07)
 patches = [
     (0x29A4DC, 0x2405010F, 0x24050107, "sw_add_vlan_fid LAN member=0x107 (Ports 0,1,2 + CPU8)"),
@@ -117,9 +117,39 @@ patches = [
     (0x29A870, 0x1000FF37, 0x1000FF34, "b 0x8029A544 (route odd WAN port 3 PVID=1 to upper-halfword)"),
     (0x5084D0, 0x00000010, 0x00000008, "l2_mask_wan = 0x08 (Switch Port 3)"),
     (0x5084D4, 0x00000004, 0x00000007, "l2_mask_lan = 0x07 (Switch Ports 0,1,2)"),
+    # Milestone 3 Switch & Routing Datapath: SBFCR1 buffer tuning, asymmetric flow control,
+    # 2-stage FABRIC WEDGE recovery ladder, and WANRouteMode=ToCpu (SWTCR0 |= 0x400C)
+    (0x29A470, 0x3C060190, 0x3C060140, "SBFCR1 FCOFF = 320 (0x0140)"),
+    (0x29A478, 0x24C601CC, 0x24C6017C, "SBFCR1 FCON = 380 (0x017C)"),
+    (0x29A6B0, 0x2C420002, 0x2C420003, "rtl865x_start: accept trunk_pause 1..3"),
+    (0x29A6B8, 0x24020001, 0x38830002, "rtl865x_start: $v1 = trunk_pause ^ 2 (mode 1->3, 2->0, 3->1)"),
+    (0x29A6C0, 0x14820003, 0x00A01025, "rtl865x_start: move $v0, $a1 (want = v)"),
+    (0x29A6C4, 0x3C020003, 0x7C628C04, "rtl865x_start: ins $v0, $v1, 16, 2 (PCRP0[17:16] = trunk_pause ^ 2)"),
+    (0x29A6CC, 0x00A21025, 0x00000000, "rtl865x_start: nop"),
+    (0x29A70C, 0x38840001, 0x38840002, "rtl865x_start: xori $a0, $a0, 2 (rtl8367s_trunk_pause_set arg = trunk_pause ^ 2)"),
+    (0x29A714, 0x2C840001, 0x00000000, "rtl865x_start: nop delay slot"),
+    (0x29839C, 0x34460060, 0x34460020, "rtl8367s_trunk_pause_set: EXT1 0x1311 |= 0x0020 (FORCE_RXPAUSE)"),
+    (0x2996A4, 0x24061076, 0x24061036, "rtl8367b_setup: EXT1 0x1311 = 0x1036 (Asymmetric Pause)"),
+    (0x50846C, 0x00000002, 0x00000003, "trunk_pause default = 3 (Asymmetric Flow Control)"),
+    (0x29AA30, 0x10400006, 0x8E24F1A0, "rtl819x_hang_check: lw $a0, jiffies"),
+    (0x29AA34, 0x3C118050, 0x10400007, "rtl819x_hang_check: beq $v0, $zero, 0x29AA54 (first hit -> Stage 1)"),
+    (0x29AA38, 0x8E24F1A0, 0x24030002, "rtl819x_hang_check: li $v1, 2 (Stage 1: Soft Descriptor Drain <2ms)"),
+    (0x29AA44, 0x0441000B, 0x04400003, "rtl819x_hang_check: bltz $v0, 0x29AA54 (>5s elapsed -> Stage 1)"),
+    (0x29AA48, 0x00000000, 0x8CE21360, "rtl819x_hang_check: lw $v0, fabric_reset_mode"),
+    (0x29AA4C, 0x8E22F1A0, 0x14430009, "rtl819x_hang_check: bne $v0, $v1, 0x29AA74 (holdoff if prior was Stage 2)"),
+    (0x29AA50, 0x3C04804F, 0x24030003, "rtl819x_hang_check: li $v1, 3 (escalate to Stage 2: Full Fabric Reset)"),
+    (0x29AA54, 0x34420001, 0x3C02804F, "rtl819x_hang_check: lui $v0, 0x804F (&system_wq high)"),
+    (0x29AA58, 0x8C85D1A0, 0x8C45D1A0, "rtl819x_hang_check: lw $a1, system_wq"),
+    (0x29AA5C, 0xACE21348, 0x34820001, "rtl819x_hang_check: ori $v0, $a0, 1 (jiffies | 1)"),
+    (0x29AA60, 0x3C028067, 0xACE21348, "rtl819x_hang_check: sw $v0, fcs_last_auto"),
+    (0x29AA70, 0xAC431360, 0xACE31360, "rtl819x_hang_check: sw $v1, fabric_reset_mode (2 or 3)"),
+    (0x29E804, 0x34424004, 0x3442400C, "gw_prog: SWTCR0 |= 0x400C (WANRouteMode = ToCpu 01)"),
 ]
 for off, exp_old, new_val, desc in patches:
     cur, = struct.unpack_from("<I", vmlinux, off)
+    if cur == new_val:
+        print(f"  [OK] Already patched 0x80{off:06X}: 0x{new_val:08X} ({desc})")
+        continue
     assert cur == exp_old, f"Patch mismatch at 0x80{off:06X}: got 0x{cur:08X}, expected 0x{exp_old:08X}"
     struct.pack_into("<I", vmlinux, off, new_val)
     print(f"  [PATCH] 0x80{off:06X}: 0x{exp_old:08X} -> 0x{new_val:08X} ({desc})")
@@ -181,11 +211,12 @@ net.netfilter.nf_conntrack_udp_timeout_stream=180
 EOF
 
     # 4b. Patch rtw88_8822b.ko for true Skyworth SE5003L1 RFE Type 6 & customize scripts
-    python3 - "$STAGE_DIR/sqfs_root" << 'PYEOF'
+    python3 - "$STAGE_DIR/sqfs_root" "$SCRIPT_DIR" << 'PYEOF'
 import os, struct, sys
 from collections import defaultdict
 
 root = sys.argv[1]
+script_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.dirname(os.path.abspath(__file__))
 
 def patch_and_verify_rtw88_8822b_ko(ko_path: str) -> None:
     raw = bytearray(open(ko_path, "rb").read())
@@ -210,6 +241,100 @@ def patch_and_verify_rtw88_8822b_ko(ko_path: str) -> None:
         for i, s in enumerate(shdrs)
     }
 
+    txt = sec_bytes[idx_text]
+    ro = sec_bytes[idx_rodata]
+    rel_ro = sec_bytes[idx_rel_rodata]
+    rostr = sec_bytes[idx_rostr]
+    dat = sec_bytes[idx_data]
+
+    patches_8822b = [
+        (0x0CF8, 0x24020002, 0x24020006),  # blank-eFuse fallback: rfe_option = 6 (Skyworth SE5003L1)
+        (0x1934, 0x1062000C, 0x00000000),  # rtw8822b_set_channel_cca: enable REG_L1WT (0x9194b2b9) for RFE 6 on Cut-B (nop beq)
+        (0x2928, 0x2EC20006, 0x2EC20007),  # rtw8822b_config_trx_mode: rfe_option < 7
+        (0x2EDC, 0x24130064, 0x241303E8),  # rtw8822b_config_trx_mode: 1x1 path timeout counter 100 -> 1000 (Challenger M1-1)
+        (0x2F7C, 0x24130064, 0x241303E8),  # rtw8822b_config_trx_mode: RF reg 0x33 polling timeout counter 100 -> 1000 (200 us -> 2 ms for VHT80 lock)
+        (0x3218, 0x24050001, 0x92050031),  # rtw8822b_config_trx_mode: center_channel = hal->current_channel (0x31($s0))
+        (0x3220, 0x00003025, 0x92060032),  # rtw8822b_config_trx_mode: bw = hal->current_band_width (0x32($s0))
+        (0x32B0, 0x3C030000, 0x3C030003),  # HI16(.rodata + 0x30000)
+        (0x32BC, 0x247E0CB0, 0x247E0000),  # LO16(.rodata + 0x30000)
+        (0x378C, 0x2EC20006, 0x2EC20007),  # rtw8822b_set_channel_bb:  rfe_option < 7
+        (0x4650, 0x3C170000, 0x3C170003),  # HI16(.rodata + 0x30000)
+        (0x4658, 0x26F70CB0, 0x26F70000),  # LO16(.rodata + 0x30000)
+    ]
+
+    words = [struct.unpack_from("<I", txt, off)[0] for off, _, _ in patches_8822b]
+    all_old = all(w == old_w for w, (_, old_w, _) in zip(words, patches_8822b))
+    all_new = all(w == new_w for w, (_, _, new_w) in zip(words, patches_8822b))
+
+    old_msg = b"rtw88: blank efuse (rfe=0xff), defaulting rfe_option=2\n"
+    new_msg = b"rtw88: blank efuse (rfe=0xff), defaulting rfe_option=6\n"
+    NEW_RFE_INFO_OFF = 0x30000
+    NEW_RFE_DEFS_OFF = 0x30090
+
+    def verify_relocations_elf(elf_bytes):
+        v_shoff, = struct.unpack_from("<I", elf_bytes, 32)
+        v_shdrs = [struct.unpack_from("<10I", elf_bytes, v_shoff + i * e_shentsize) for i in range(e_shnum)]
+        bases, mem, cur_va = {}, {}, 0xC0915000
+        for i, s in enumerate(v_shdrs):
+            if s[2] & 0x2:
+                align = max(s[8], 4)
+                cur_va = (cur_va + align - 1) & ~(align - 1)
+                bases[i] = cur_va
+                mem[i] = bytearray(s[5]) if s[1] == 8 else bytearray(elf_bytes[s[4]:s[4] + s[5]])
+                cur_va += s[5]
+        v_sym = elf_bytes[v_shdrs[idx_symtab][4]:v_shdrs[idx_symtab][4] + v_shdrs[idx_symtab][5]]
+        def sym_va(sidx):
+            _, st_val, _, _, _, st_shndx = struct.unpack_from("<IIIBBH", v_sym, sidx * 16)
+            return (0x80100000 + sidx * 16) if st_shndx == 0 else (bases[st_shndx] + st_val)
+        for i, s in enumerate(v_shdrs):
+            if s[1] == 9 and s[7] in mem:
+                tbuf = mem[s[7]]; rb = elf_bytes[s[4]:s[4] + s[5]]
+                hi_by_sym = defaultdict(list); last_hi = {}
+                for j in range(0, len(rb), 8):
+                    r_off, r_info = struct.unpack_from("<II", rb, j)
+                    sidx = r_info >> 8; rtype = r_info & 0xFF; sva = sym_va(sidx)
+                    w, = struct.unpack_from("<I", tbuf, r_off)
+                    if rtype == 2:
+                        struct.pack_into("<I", tbuf, r_off, (w + sva) & 0xFFFFFFFF)
+                    elif rtype == 5:
+                        hi_by_sym[sidx].append((r_off, w)); last_hi[sidx] = w & 0xFFFF
+                    elif rtype == 6:
+                        lo = (w & 0xFFFF) - (0x10000 if (w & 0x8000) else 0)
+                        hi0 = last_hi.get(sidx, 0)
+                        for h_off, hw in hi_by_sym[sidx]:
+                            v = (sva + ((hw & 0xFFFF) << 16) + lo) & 0xFFFFFFFF
+                            struct.pack_into("<I", tbuf, h_off, (hw & 0xFFFF0000) | (((v + 0x8000) >> 16) & 0xFFFF))
+                        hi_by_sym[sidx].clear()
+                        v = (sva + (hi0 << 16) + lo) & 0xFFFFFFFF
+                        struct.pack_into("<I", tbuf, r_off, (w & 0xFFFF0000) | (v & 0xFFFF))
+        rfe6_info = struct.unpack_from("<5I", mem[idx_rodata], 0x30000 + 6 * 20)
+        assert rfe6_info == (bases[idx_rodata] + 0xD58, bases[idx_rodata] + 0xD58, 1, 0, bases[idx_text] + 0x1A4C)
+        rfe6_defs = struct.unpack_from("<2I", mem[idx_rodata], 0x30090 + 6 * 8)
+        assert rfe6_defs == (bases[idx_rodata] + 0x16204, bases[idx_rodata] + 0x0E50)
+
+    # 1. State A: Already-Patched
+    cur_defs_ptr, cur_defs_sz = struct.unpack_from("<II", dat, 0x94)
+    if all_new and len(ro) >= NEW_RFE_DEFS_OFF and new_msg in rostr and cur_defs_ptr == NEW_RFE_DEFS_OFF and cur_defs_sz == 7:
+        verify_relocations_elf(raw)
+        print(f"  [OK] Already patched & relocation-verified rtw88_8822b.ko for Skyworth SE5003L1 RFE Type 6 ({len(raw):,} B)")
+        return
+
+    # 2. State B: Verify Pristine Anchors
+    if not (all_old and len(ro) == 0x2DF30 and old_msg in rostr and cur_defs_ptr == 0x904 and cur_defs_sz == 6):
+        mismatches = []
+        for (off, old_w, new_w), cur_w in zip(patches_8822b, words):
+            if cur_w != old_w:
+                state = "already patched" if cur_w == new_w else "unknown/corrupted"
+                mismatches.append(f"    .text+0x{off:x}: got 0x{cur_w:08x} ({state}), expected pristine 0x{old_w:08x} or target 0x{new_w:08x}")
+        if len(ro) != 0x2DF30:
+            mismatches.append(f"    .rodata length: got 0x{len(ro):x}, expected pristine 0x2DF30")
+        if old_msg not in rostr:
+            mismatches.append(f"    .rodata.str1.4: fallback string not pristine")
+        if cur_defs_ptr != 0x904 or cur_defs_sz != 6:
+            mismatches.append(f"    .data definitions pointer/size: got (0x{cur_defs_ptr:x}, {cur_defs_sz}), expected (0x904, 6)")
+        raise AssertionError("rtw88_8822b.ko partially patched or unexpected opcode/state:\n" + "\n".join(mismatches))
+
+    # 3. State B Execution: Apply all 12 patches, expand .rodata, add relocations, update .data
     sym_b = sec_bytes[idx_symtab]
     str_b = sec_bytes[idx_strtab]
     sym_idx_by_name, sec_sym_idx = {}, {}
@@ -227,36 +352,13 @@ def patch_and_verify_rtw88_8822b_ko(ko_path: str) -> None:
     sym_rodata_sec = sec_sym_idx[idx_rodata]
     sym_text_sec = sec_sym_idx[idx_text]
 
-    txt = sec_bytes[idx_text]
-    ro = sec_bytes[idx_rodata]
-    rel_ro = sec_bytes[idx_rel_rodata]
-    rostr = sec_bytes[idx_rostr]
-    dat = sec_bytes[idx_data]
-
-    for off, old_w, new_w in [
-        (0x0CF8, 0x24020002, 0x24020006),  # blank-eFuse fallback: rfe_option = 6 (Skyworth SE5003L1)
-        (0x2928, 0x2EC20006, 0x2EC20007),  # rtw8822b_config_trx_mode: rfe_option < 7
-        (0x378C, 0x2EC20006, 0x2EC20007),  # rtw8822b_set_channel_bb:  rfe_option < 7
-        (0x32B0, 0x3C030000, 0x3C030003),  # HI16(.rodata + 0x30000)
-        (0x32BC, 0x247E0CB0, 0x247E0000),  # LO16(.rodata + 0x30000)
-        (0x4650, 0x3C170000, 0x3C170003),  # HI16(.rodata + 0x30000)
-        (0x4658, 0x26F70CB0, 0x26F70000),  # LO16(.rodata + 0x30000)
-    ]:
-        cur_w, = struct.unpack_from("<I", txt, off)
-        assert cur_w == old_w, f".text+0x{off:x}: got 0x{cur_w:08x}, expected 0x{old_w:08x}"
+    for off, _, new_w in patches_8822b:
         struct.pack_into("<I", txt, off, new_w)
 
-    old_msg = b"rtw88: blank efuse (rfe=0xff), defaulting rfe_option=2\n"
-    new_msg = b"rtw88: blank efuse (rfe=0xff), defaulting rfe_option=6\n"
     msg_idx = rostr.find(old_msg)
-    assert msg_idx != -1, "Missing fallback string in .rodata.str1.4"
     rostr[msg_idx:msg_idx + len(new_msg)] = new_msg
 
-    assert len(ro) == 0x2DF30, f"Unexpected .rodata size 0x{len(ro):x}"
-    NEW_RFE_INFO_OFF = 0x30000
-    NEW_RFE_DEFS_OFF = 0x30090
     ro.extend(b"\x00" * (NEW_RFE_INFO_OFF - len(ro)))
-
     # rfe_info[0..5] + rfe_info[6] (cca_efem_ccut, cca_efem_ccut, RTW_CCA_SRC_EFEM=1, coex_scbd=0, rtw8822b_config_rfe_efem)
     ro.extend(bytes(ro[0xCB0:0xCB0 + 120]) + struct.pack("<IIIII", 0x00000D58, 0x00000D58, 1, 0, 0x00001A4C))
     ro.extend(b"\x00" * (NEW_RFE_DEFS_OFF - len(ro)))
@@ -284,8 +386,6 @@ def patch_and_verify_rtw88_8822b_ko(ko_path: str) -> None:
     extra_rels.extend(struct.pack("<II", RFE6_DEFS_OFF + 0x04, (sym_lmt5 << 8) | R_MIPS_32))
     rel_ro.extend(extra_rels)
 
-    cur_defs_ptr, cur_defs_sz = struct.unpack_from("<II", dat, 0x94)
-    assert cur_defs_ptr == 0x904 and cur_defs_sz == 6
     struct.pack_into("<II", dat, 0x94, NEW_RFE_DEFS_OFF, 7)
 
     out = bytearray(raw[:0x40])
@@ -306,48 +406,68 @@ def patch_and_verify_rtw88_8822b_ko(ko_path: str) -> None:
     open(ko_path, "wb").write(out)
 
     # Self-test with Linux arch/mips/kernel/module.c relocation rules
-    v_shoff, = struct.unpack_from("<I", out, 32)
-    v_shdrs = [struct.unpack_from("<10I", out, v_shoff + i * e_shentsize) for i in range(e_shnum)]
-    bases, mem, cur_va = {}, {}, 0xC0915000
-    for i, s in enumerate(v_shdrs):
-        if s[2] & 0x2:
-            align = max(s[8], 4)
-            cur_va = (cur_va + align - 1) & ~(align - 1)
-            bases[i] = cur_va
-            mem[i] = bytearray(s[5]) if s[1] == 8 else bytearray(out[s[4]:s[4] + s[5]])
-            cur_va += s[5]
-    v_sym = out[v_shdrs[idx_symtab][4]:v_shdrs[idx_symtab][4] + v_shdrs[idx_symtab][5]]
-    def sym_va(sidx):
-        _, st_val, _, _, _, st_shndx = struct.unpack_from("<IIIBBH", v_sym, sidx * 16)
-        return (0x80100000 + sidx * 16) if st_shndx == 0 else (bases[st_shndx] + st_val)
-    for i, s in enumerate(v_shdrs):
-        if s[1] == 9 and s[7] in mem:
-            tbuf = mem[s[7]]; rb = out[s[4]:s[4] + s[5]]
-            hi_by_sym = defaultdict(list); last_hi = {}
-            for j in range(0, len(rb), 8):
-                r_off, r_info = struct.unpack_from("<II", rb, j)
-                sidx = r_info >> 8; rtype = r_info & 0xFF; sva = sym_va(sidx)
-                w, = struct.unpack_from("<I", tbuf, r_off)
-                if rtype == 2:
-                    struct.pack_into("<I", tbuf, r_off, (w + sva) & 0xFFFFFFFF)
-                elif rtype == 5:
-                    hi_by_sym[sidx].append((r_off, w)); last_hi[sidx] = w & 0xFFFF
-                elif rtype == 6:
-                    lo = (w & 0xFFFF) - (0x10000 if (w & 0x8000) else 0)
-                    hi0 = last_hi.get(sidx, 0)
-                    for h_off, hw in hi_by_sym[sidx]:
-                        v = (sva + ((hw & 0xFFFF) << 16) + lo) & 0xFFFFFFFF
-                        struct.pack_into("<I", tbuf, h_off, (hw & 0xFFFF0000) | (((v + 0x8000) >> 16) & 0xFFFF))
-                    hi_by_sym[sidx].clear()
-                    v = (sva + (hi0 << 16) + lo) & 0xFFFFFFFF
-                    struct.pack_into("<I", tbuf, r_off, (w & 0xFFFF0000) | (v & 0xFFFF))
-    rfe6_info = struct.unpack_from("<5I", mem[idx_rodata], 0x30000 + 6 * 20)
-    assert rfe6_info == (bases[idx_rodata] + 0xD58, bases[idx_rodata] + 0xD58, 1, 0, bases[idx_text] + 0x1A4C)
-    rfe6_defs = struct.unpack_from("<2I", mem[idx_rodata], 0x30090 + 6 * 8)
-    assert rfe6_defs == (bases[idx_rodata] + 0x16204, bases[idx_rodata] + 0x0E50)
+    verify_relocations_elf(out)
     print(f"  [OK] Patched & relocation-verified rtw88_8822b.ko for Skyworth SE5003L1 RFE Type 6 ({len(out):,} B)")
 
 patch_and_verify_rtw88_8822b_ko(os.path.join(root, "lib/modules/4.14.187/rtw88_8822b.ko"))
+
+def patch_and_verify_rtw88_core_ko(ko_path: str) -> None:
+    raw = bytearray(open(ko_path, "rb").read())
+    assert raw[:4] == b"\x7fELF" and raw[4] == 1 and raw[5] == 1, "Expected 32-bit LE ELF"
+
+    e_shoff, = struct.unpack_from("<I", raw, 32)
+    e_shentsize, e_shnum, e_shstrndx = struct.unpack_from("<HHH", raw, 46)
+    shdrs = [list(struct.unpack_from("<10I", raw, e_shoff + i * e_shentsize)) for i in range(e_shnum)]
+    shstr = bytes(raw[shdrs[e_shstrndx][4]:shdrs[e_shstrndx][4] + shdrs[e_shstrndx][5]])
+    sec_by_name = {shstr[s[0]:shstr.index(b"\x00", s[0])].decode(): i for i, s in enumerate(shdrs)}
+    text_off = shdrs[sec_by_name[".text"]][4]
+
+    patches_core = [
+        # rtw_tx_fill_tx_desc: clamp rate_id to 4 (DESC_RATE6M = 6 Mbps OFDM) if < 4 (prevent invalid CCK 1M on 5 GHz)
+        (0x4228, 0x240AFF80, 0x240A0004),  # addiu $t2, $zero, 4 (DESC_RATE6M)
+        (0x422C, 0x00CA3024, 0x2C680004),  # sltiu $t0, $v1, 4 (if rate_id < 4)
+        (0x4230, 0x3063007F, 0x0148180B),  # movn  $v1, $t2, $t0 (rate_id = 4)
+        (0x4234, 0x00661825, 0x7C663004),  # ins   $a2, $v1, 0, 7 (desc[4] bits 0..6 = rate_id)
+        (0x4238, 0xAC430010, 0xAC460010),  # sw    $a2, 0x10($v0) (desc[4] = a2)
+        # rtw_tx_fill_tx_desc: enforce dis_rate_fallback = 1 for rate_id <= 4 (prevent CCK fallback on 5 GHz)
+        (0x437C, 0x2409FFEF, 0x90890008),  # lbu   $t1, 8($a0) (load pkt_info->rate_id)
+        (0x4380, 0x00063100, 0x2D290005),  # sltiu $t1, $t1, 5 (if rate_id <= 4)
+        (0x4384, 0x01094024, 0x00C93025),  # or    $a2, $a2, $t1 (dis_rate_fallback |= (rate_id <= 4))
+        (0x4388, 0x00C84025, 0x7CC82104),  # ins   $t0, $a2, 4, 1 (insert bit 4 into desc[5])
+        # rtw_rsvd_page_pkt_info_update: enforce DESC_RATE6M (4) for Beacons and Nullfunc
+        (0x4BDC, 0x24030012, 0x24031204),  # addiu $v1, $zero, 0x1204 (rate_id = 4, sec_ch = 0x12)
+        (0x4BE0, 0xA0A30009, 0xA4A30008),  # sh    $v1, 8($a1) (store rate_id and sec_ch)
+    ]
+
+    words = [struct.unpack_from("<I", raw, text_off + off)[0] for off, _, _ in patches_core]
+    all_old = all(w == old_w for w, (_, old_w, _) in zip(words, patches_core))
+    all_new = all(w == new_w for w, (_, _, new_w) in zip(words, patches_core))
+
+    if all_new:
+        print(f"  [OK] Already patched & verified rtw88_core.ko for 5 GHz DESC_RATE6M ({len(raw):,} B)")
+        return
+
+    if not all_old:
+        mismatches = []
+        for (off, old_w, new_w), cur_w in zip(patches_core, words):
+            if cur_w != old_w:
+                state = "already patched" if cur_w == new_w else "unknown/corrupted"
+                mismatches.append(f"    .text+0x{off:x}: got 0x{cur_w:08x} ({state}), expected pristine 0x{old_w:08x} or target 0x{new_w:08x}")
+        raise AssertionError("rtw88_core.ko partially patched or unexpected opcode(s):\n" + "\n".join(mismatches))
+
+    for off, _, new_w in patches_core:
+        struct.pack_into("<I", raw, text_off + off, new_w)
+
+    open(ko_path, "wb").write(raw)
+
+    verify_raw = open(ko_path, "rb").read()
+    for off, _, new_w in patches_core:
+        v_w, = struct.unpack_from("<I", verify_raw, text_off + off)
+        assert v_w == new_w, f"rtw88_core.ko post-patch verification failed at .text+0x{off:x}: got 0x{v_w:08x}, expected 0x{new_w:08x}"
+
+    print(f"  [OK] Patched & verified rtw88_core.ko for 5 GHz DESC_RATE6M ({len(raw):,} B)")
+
+patch_and_verify_rtw88_core_ko(os.path.join(root, "lib/modules/4.14.187/rtw88_core.ko"))
 
 # 1. /lib/realtek.sh: detect "Tenda AC10 V1.0" -> "tenda,ac10-v1"
 p_rtk = os.path.join(root, "lib/realtek.sh")
@@ -388,18 +508,23 @@ assert "  gwr1200ac-v1)" in s
 s = s.replace("  gwr1200ac-v1)", ac10_net_case, 1)
 open(p_net, "w", encoding="utf-8").write(s)
 
-# 4. /etc/init.d/dir842-asic: poll BOTH eth0.2 LAN MAC (HW_NIC0_ADDR) AND eth0.1 cloned WAN MAC
-#    in wait_netif_mac() before gw_prog, keep fabric_autoreset=3 armed, and keep hwnat=0 by default
-#    so bridged Wi-Fi -> WAN flows use Linux software flow_offloading without ASIC NAPT blackholing
+# 4. /etc/init.d/dir842-asic: poll BOTH eth0.2 LAN MAC (HW_NIC0_ADDR) AND eth0.1 cloned WAN MAC,
+#    synchronize with wireless interfaces in wait_netif_mac() before gw_prog, arm wan_route_mode=1 (ToCpu),
+#    and keep hwnat=1 armed with wireless station discrimination in rtl819x_hwnat.c
 p_asic = os.path.join(root, "etc/init.d/dir842-asic")
 s = open(p_asic, "r", encoding="utf-8").read()
-assert '*) want="" ;;' in s
-assert "\tdone\n\tsleep 2\n}" in s
-s = s.replace(
-    '*) want="" ;;',
-    '*) want=$(dd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr \'\\0\' \'\\n\' | tr -d \'\\r\' | grep \'^HW_NIC0_ADDR=\' | head -n1 | cut -d= -f2 | sed \'s/../&:/g;s/:$//\' | tr \'A-F\' \'a-f\') ;;',
-)
+if '*) want="" ;;' in s:
+    s = s.replace(
+        '*) want="" ;;',
+        '*) want=$(dd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr \'\\0\' \'\\n\' | tr -d \'\\r\' | grep \'^HW_NIC0_ADDR=\' | head -n1 | cut -d= -f2 | sed \'s/../&:/g;s/:$//\' | tr \'A-F\' \'a-f\') ;;',
+    )
 wan_poll_snippet = """\tdone
+\t# Synchronize with wireless interfaces before ASIC programming (max 15s)
+\ti=0
+\twhile [ $i -lt 15 ]; do
+\t\t[ -d /sys/class/net/br-lan/brif/wlan0 ] && [ -d /sys/class/net/br-lan/brif/wlan1 ] && break
+\t\ti=$((i+1)); sleep 1
+\tdone
 \twan_want=$(uci -q get network.wan.macaddr 2>/dev/null | tr "A-F" "a-f")
 \tif [ -n "$wan_want" ]; then
 \t\ti=0
@@ -410,21 +535,47 @@ wan_poll_snippet = """\tdone
 \tfi
 \tsleep 2
 }"""
-s = s.replace("\tdone\n\tsleep 2\n}", wan_poll_snippet, 1)
-s = s.replace(
-    'echo 1 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null',
-    'echo 0 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null\n\t\techo 0 > /sys/module/rtl819x/parameters/hwnat_debug 2>/dev/null',
-)
+if "\tdone\n\tsleep 2\n}" in s:
+    s = s.replace("\tdone\n\tsleep 2\n}", wan_poll_snippet, 1)
+
+old_rearm = 'echo 1 > /sys/module/rtl819x/parameters/fabric_gw_rearm 2>/dev/null\n\tfi'
+new_rearm = 'echo 1 > /sys/module/rtl819x/parameters/fabric_gw_rearm 2>/dev/null\n\t\techo 1 > /sys/module/rtl819x/parameters/wan_route_mode 2>/dev/null\n\tfi'
+if 'wan_route_mode' not in s and old_rearm in s:
+    s = s.replace(old_rearm, new_rearm, 1)
+
 open(p_asic, "w", encoding="utf-8").write(s)
 os.chmod(p_asic, 0o755)
-for _svc in ("etc/init.d/asic-wifi-settle", "etc/init.d/dir842-l2flush"):
-    _svc_p = os.path.join(root, _svc)
-    if os.path.exists(_svc_p):
-        os.chmod(_svc_p, 0o755)
+
+# 4b. Deploy Milestone 3 differential dir842-l2flush and neutralized asic-wifi-settle
+p_settle = os.path.join(root, "etc/init.d/asic-wifi-settle")
+open(p_settle, "w", encoding="utf-8").write(
+    "#!/bin/sh /etc/rc.common\n"
+    "# Non-disruptive ASIC synchronization shim.\n"
+    "# Replaces the disruptive 120s wait + full fabric reset with non-disruptive boot synchronization.\n\n"
+    "START=99\n\n"
+    "start() {\n"
+    '\t# Datapath bring-up is synchronized directly in /etc/init.d/dir842-asic at boot.\n'
+    '\t# Background restart is omitted to prevent link drops and 2.5s network freezes.\n'
+    '\tlogger -t asic-wifi-settle "ASIC synchronization active (non-disruptive, no fabric reset)"\n'
+    '\treturn 0\n'
+    "}\n\n"
+    "stop() {\n\t:\n}\n"
+)
+os.chmod(p_settle, 0o755)
+
+l2flush_src_path = os.path.join(script_dir, "tools", "scripts", "dir842-l2flush")
+l2flush_content = open(l2flush_src_path, "r", encoding="utf-8").read()
+p_l2flush = os.path.join(root, "etc/init.d/dir842-l2flush")
+p_l2flush_bin = os.path.join(root, "usr/sbin/dir842-l2flush")
+open(p_l2flush, "w", encoding="utf-8").write(l2flush_content)
+os.chmod(p_l2flush, 0o755)
+os.makedirs(os.path.dirname(p_l2flush_bin), exist_ok=True)
+open(p_l2flush_bin, "w", encoding="utf-8").write(l2flush_content)
+os.chmod(p_l2flush_bin, 0o755)
 
 # 5. /etc/uci-defaults/99-dir842-m5: Switch Port 3 = WAN (vlan 1), Ports 0,1,2 = LAN (vlan 2),
 #    Tenda SSID/MAC (neutral fallback 50:0f:f5:00:00:05), bind radio0 by PCIe path (immune to phy0->phy1),
-#    VHT20 default on channel 36 + country=US (23 dBm, immune to rtw88 VHT80 RF poll timeouts),
+#    VHT80 default on channel 36 + country=US (23 dBm, 866.7 Mbps PHY with extended RF 0x33 poll timeout),
 #    software flow_offloading=1, clean IPv4 + RFC 9462 DDR DNS defaults for iOS/macOS compatibility,
 #    WAN shared-VLAN socket isolation (dnsmasq notinterface=eth0.1, uhttpd LAN-only 192.168.0.1/127.0.0.1),
 #    and 256 KB ring buffer log_size.
@@ -434,7 +585,7 @@ assert "set network.@switch_vlan[-1].ports='4 6t'" in s
 assert "set network.@switch_vlan[-1].ports='0 1 2 3 6t'" in s
 s = s.replace("set network.@switch_vlan[-1].ports='4 6t'", "set network.@switch_vlan[-1].ports='3 6t'")
 s = s.replace("set network.@switch_vlan[-1].ports='0 1 2 3 6t'", "set network.@switch_vlan[-1].ports='0 1 2 6t'")
-s = s.replace("set wireless.radio0.htmode='HT20'", "set wireless.radio0.htmode='VHT20'")
+s = s.replace("set wireless.radio0.htmode='HT20'", "set wireless.radio0.htmode='VHT80'")
 s = s.replace("set wireless.radio0.country='BR'", "set wireless.radio0.country='US'")
 s = s.replace("set wireless.default_radio0.ssid='DIR842-OpenWrt'", "set wireless.default_radio0.ssid='Tenda-AC10-5G'")
 s = s.replace(
@@ -464,7 +615,7 @@ fi
 uci -q delete network.globals.ula_prefix
 uci -q commit network
 uci -q set firewall.@defaults[0].flow_offloading='1'
-uci -q set firewall.@defaults[0].flow_offloading_hw='0'
+uci -q set firewall.@defaults[0].flow_offloading_hw='1'
 uci -q commit firewall
 uci -q set dhcp.@dnsmasq[0].rebind_protection='0'
 uci -q set dhcp.@dnsmasq[0].cachesize='1000'
@@ -495,7 +646,7 @@ open(p_m5, "w", encoding="utf-8").write(s)
 # 5b. /etc/uci-defaults/11_dir842-htmode-ht20: do not clobber user-selected VHT40/VHT80 across sysupgrade
 p_ht20 = os.path.join(root, "etc/uci-defaults/11_dir842-htmode-ht20")
 if os.path.exists(p_ht20):
-    open(p_ht20, "w", encoding="utf-8").write("#!/bin/sh\n# Tenda AC10 V1.0: preserve user-selected 5 GHz htmode (HT20 default; VHT40/VHT80 optional)\nexit 0\n")
+    open(p_ht20, "w", encoding="utf-8").write("#!/bin/sh\n# Tenda AC10 V1.0: preserve user-selected 5 GHz htmode (VHT80 default; VHT20/VHT40 optional)\nexit 0\n")
 
 # 5c. /lib/preinit/80_mount_root: auto-erase stale stock Tenda SquashFS bytes at rootfs_data before mount_root
 p_mr = os.path.join(root, "lib/preinit/80_mount_root")
@@ -581,7 +732,8 @@ cal_snippet = """\t\techo "${phy_ifname}_phyBandSelect=1"
 \t\techo "${phy_ifname}_shortGI40M=1"
 \t\techo "${phy_ifname}_ampdu=1"
 \t\techo "${phy_ifname}_manual_edca=1"
-\t\techo "${phy_ifname}_disable_txsc=0"
+\t\techo "${phy_ifname}_disable_txsc=1"
+\t\techo "${phy_ifname}_amsdu=1"
 \t\techo "${phy_ifname}_trswitch=1"
 \t\techo "${phy_ifname}_txbf=0"
 \t\techo "${phy_ifname}_led_type=${led_type:-7}"

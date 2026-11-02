@@ -1,4 +1,4 @@
-5954e788b577597c5fe1bd23e18158fb5e368226bf3bc69fca7e0b18cd77ad76  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin
-5954e788b577597c5fe1bd23e18158fb5e368226bf3bc69fca7e0b18cd77ad76  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin
-87da99ea1df7312b41e26e3f9fa449a7863427e7b84a50790a0727694583e056  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin
+88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin
+88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin
+ad3e4ab89548e0c32f98d6c80f24cdbb691ec027dd791a6dd82ebd0919e3014b  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin
 f5c7d1755689dd5319420289d8ebd4e661d418f56d99b775f6111c48a3c96345  tenda-ac10-v1.dtb

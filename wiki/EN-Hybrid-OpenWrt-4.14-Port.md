@@ -2,7 +2,7 @@
 
 > **Navigation:** [Home (EN)](EN-Home) | [Русская версия](RU-Hybrid-OpenWrt-4.14-Port) | [Wiki Portal](Home)
 
-**Hybrid OpenWrt 4.14.187 (`v4.14.187-r2-ac10-hybrid`)** pairs **OpenWrt 19.07 userland + LuCI** (`http://192.168.0.1`, Dropbear SSH, `fw3`, persistent `JFFS2` overlay) with a patched **Linux 4.14.187** kernel tailored to the Tenda AC10 V1.0's `RTL8197FS` SoC, `RTL8367RB` switch, and `RTL8822BE` 5 GHz PCIe radio.
+**Hybrid OpenWrt 4.14.187 (`v4.14.187-r3-ac10-hybrid`)** pairs **OpenWrt 19.07 userland + LuCI** (`http://192.168.0.1`, Dropbear SSH, `fw3`, persistent `JFFS2` overlay) with a patched **Linux 4.14.187** kernel tailored to the Tenda AC10 V1.0's `RTL8197FS` SoC, `RTL8367RB` switch, and `RTL8822BE` 5 GHz PCIe radio.
 
 ---
 

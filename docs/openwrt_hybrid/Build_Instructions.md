@@ -1,6 +1,6 @@
 # Сборка Hybrid OpenWrt 4.14.187 с нуля / Reproducible Build Guide (RU / EN)
 
-Весь процесс сборки прошивки `v4.14.187-r2-ac10-hybrid` автоматизирован в одном самодостаточном скрипте [**`build_hybrid_openwrt_ac10.sh`**](../../build_hybrid_openwrt_ac10.sh) и проверяется в облаке через GitHub Actions ([**`.github/workflows/build-ac10-hybrid-openwrt.yml`**](../../.github/workflows/build-ac10-hybrid-openwrt.yml)). Вам не нужно вручную собирать старый тулчейн на двое суток или править бинарники в hex-редакторе руками.
+Весь процесс сборки прошивки `v4.14.187-r3-ac10-hybrid` автоматизирован в одном самодостаточном скрипте [**`build_hybrid_openwrt_ac10.sh`**](../../build_hybrid_openwrt_ac10.sh) и проверяется в облаке через GitHub Actions ([**`.github/workflows/build-ac10-hybrid-openwrt.yml`**](../../.github/workflows/build-ac10-hybrid-openwrt.yml)). Вам не нужно вручную собирать старый тулчейн на двое суток или править бинарники в hex-редакторе руками.
 
 ---
 
@@ -18,9 +18,9 @@ chmod +x build_hybrid_openwrt_ac10.sh
 ```
 
 Через 1–2 минуты в папке `02_Compiled_Hybrid_OpenWrt_4.14_Firmware/` появятся четыре проверенных файла:
-- `tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin` (`5,546,630` байт, монолитный `cs6c` с записью по `0x00030000` для TFTP);
-- `tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin` (`5,546,630` байт, для обновления через LuCI / `sysupgrade`);
-- `tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin` (`5,546,694` байт, обёрнутый в 64-байтный заголовок `trx2` с кодом модели `0x00030028` для прошивки прямо из родного меню Tenda без ошибки `"Format error!"`);
+- `tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin` (`5,681,798` байт, монолитный `cs6c` с записью по `0x00030000` для TFTP);
+- `tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin` (`5,681,798` байт, для обновления через LuCI / `sysupgrade`);
+- `tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin` (`5,681,862` байт, обёрнутый в 64-байтный заголовок `trx2` с кодом модели `0x00030028` для прошивки прямо из родного меню Tenda без ошибки `"Format error!"`);
 - `tenda-ac10-v1.dtb` (`4,182` байта, скомпилированное дерево устройств).
 
 ---

@@ -18,7 +18,7 @@ TMP_CAL="/tmp/factory_cal.$$"
 
 # 1. Locate the calibration partition dynamically by MTD label
 if [ -f /proc/mtd ]; then
-    CAL_DEV_NAME=$(grep -i '"calibration"' /proc/mtd | head -n1 | cut -d: -f1)
+    CAL_DEV_NAME=$(grep -i -E '"(calibration|caldata)"' /proc/mtd | head -n1 | cut -d: -f1)
     if [ -n "$CAL_DEV_NAME" ]; then
         CAL_BLK="/dev/$(printf '%s' "$CAL_DEV_NAME" | sed 's/^mtd/mtdblock/')"
         if [ -b "$CAL_BLK" ]; then
@@ -51,7 +51,7 @@ if [ -z "$CAL_DEV" ]; then
     done
 fi
 
-if [ -z "$CAL_DEV" ] || { [ ! -b "$CAL_DEV" ] && [ ! -c "$CAL_DEV" ]; }; then
+if [ -z "$CAL_DEV" ] || { [ ! -b "$CAL_DEV" ] && [ ! -c "$CAL_DEV" ] && [ ! -f "$CAL_DEV" ]; }; then
     logger -t set-mib "ERROR: Factory calibration MTD partition not found! Aborting."
     exit 1
 fi
@@ -222,6 +222,7 @@ if [ -e /proc/wlan0/mib_all ] && [ -e /proc/wlan1/mib_all ]; then
         iwpriv wlan1 set_mib shortGI20M=1
         iwpriv wlan1 set_mib shortGI40M=1
         iwpriv wlan1 set_mib ampdu=1
+        iwpriv wlan1 set_mib amsdu=1
         iwpriv wlan1 set_mib manual_edca=1
         iwpriv wlan1 set_mib disable_txsc=1
         [ "$UCI_2G_NOSCAN" = "1" ] && iwpriv wlan1 set_mib coexist=0
@@ -331,6 +332,7 @@ else
         iwpriv "$VENDOR_2G_IF" set_mib shortGI20M=1 2>/dev/null || true
         iwpriv "$VENDOR_2G_IF" set_mib shortGI40M=1 2>/dev/null || true
         iwpriv "$VENDOR_2G_IF" set_mib ampdu=1 2>/dev/null || true
+        iwpriv "$VENDOR_2G_IF" set_mib amsdu=1 2>/dev/null || true
         # vladisslav0 4PDA #97815216 & #98016337 fixes for UDP/uTP torrent stalls & TX shortcut corruption:
         iwpriv "$VENDOR_2G_IF" set_mib manual_edca=1 2>/dev/null || true
         iwpriv "$VENDOR_2G_IF" set_mib disable_txsc=1 2>/dev/null || true

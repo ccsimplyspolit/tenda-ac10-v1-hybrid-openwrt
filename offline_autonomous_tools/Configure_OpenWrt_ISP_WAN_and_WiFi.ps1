@@ -394,11 +394,11 @@ ip link set dev eth0.1 down 2>/dev/null || true
 ip link set dev eth0.1 address $shWanMac 2>/dev/null || true
 ip link set dev eth0.1 up 2>/dev/null || true
 
-# 1b. Eliminate ULA IPv6 blackhole & enable Linux Software Flow Offloading (hwnat=0 prevents bridged Wi-Fi WAN blackhole)
+# 1b. Eliminate ULA IPv6 blackhole & enable Linux Software + Hardware Flow Offloading (wan_route_mode=1 ToCpu traps Wi-Fi flows cleanly)
 uci -q delete network.globals.ula_prefix 2>/dev/null || true
 uci commit network
 uci -q set firewall.@defaults[0].flow_offloading='1' || true
-uci -q set firewall.@defaults[0].flow_offloading_hw='0' || true
+uci -q set firewall.@defaults[0].flow_offloading_hw='1' || true
 uci commit firewall
 
 # 2. Provision LAN DHCP Pool, Static Reservations, WAN Shared-VLAN Socket Isolation & Apple RFC 9462 DDR Encrypted DNS
@@ -427,11 +427,11 @@ uci commit uhttpd
 uci -q set system.@system[0].log_size='256' || true
 uci commit system
 
-# 3. Provision 5 GHz Wi-Fi (radio0: VHT20 on Channel 36 + country=US 23 dBm avoids rtw88 VHT80 RF poll timeouts)
+# 3. Provision 5 GHz Wi-Fi (radio0: VHT80 on Channel 36 + country=US 23 dBm with extended RF 0x33 poll timeout)
 uci -q set wireless.radio0.disabled='0' || true
 uci -q delete wireless.radio0.disabled 2>/dev/null || true
 uci -q set wireless.radio0.country='US' || true
-uci -q set wireless.radio0.htmode='VHT20' || true
+uci -q set wireless.radio0.htmode='VHT80' || true
 $chan5GUci
 if uci -q get wireless.default_radio0 >/dev/null 2>&1; then
     W_IF0="default_radio0"
@@ -483,9 +483,9 @@ for iface in `$(uci show wireless 2>/dev/null | grep "=wifi-iface" | cut -d"." -
 done
 uci commit wireless
 
-# 5. Persist hwnat=0 & cloned WAN MAC poll in /etc/init.d/dir842-asic (keeps ASIC router VLAN/L2 tables + fabric_autoreset=3 while preventing bridged Wi-Fi NAPT blackhole)
+# 5. Persist wan_route_mode=1 (ToCpu), hwnat=1 & cloned WAN MAC poll in /etc/init.d/dir842-asic
 if [ -f /etc/init.d/dir842-asic ]; then
-    sed -i 's|echo 1 > /sys/module/rtl819x/parameters/hwnat|echo 0 > /sys/module/rtl819x/parameters/hwnat|g' /etc/init.d/dir842-asic
+    sed -i 's|echo 0 > /sys/module/rtl819x/parameters/hwnat|echo 1 > /sys/module/rtl819x/parameters/hwnat|g' /etc/init.d/dir842-asic
     if ! grep -q 'wan_want=' /etc/init.d/dir842-asic; then
         awk '
         /^\tsleep 2$/ && !done_wan {
@@ -504,7 +504,8 @@ if [ -f /etc/init.d/dir842-asic ]; then
     done
 fi
 echo 3 > /sys/module/rtl819x/parameters/fabric_autoreset 2>/dev/null || true
-echo 0 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null || true
+echo 1 > /sys/module/rtl819x/parameters/wan_route_mode 2>/dev/null || true
+echo 1 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null || true
 echo 0 > /sys/module/rtl819x/parameters/hwnat_debug 2>/dev/null || true
 
 # 6. Reload Network, Firewall, DHCP, Web UI, Wi-Fi & RTL8197FS Switch/VLAN ASIC
@@ -519,7 +520,8 @@ if [ -x /etc/init.d/dir842-asic ]; then
         sleep 2
         ip link set dev eth0.1 address $shWanMac 2>/dev/null || true
         /etc/init.d/dir842-asic restart >/dev/null 2>&1 || true
-        echo 0 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null || true
+        echo 1 > /sys/module/rtl819x/parameters/wan_route_mode 2>/dev/null || true
+        echo 1 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null || true
         echo 0 > /sys/module/rtl819x/parameters/hwnat_debug 2>/dev/null || true
         sync
     ) </dev/null >/dev/null 2>&1 &

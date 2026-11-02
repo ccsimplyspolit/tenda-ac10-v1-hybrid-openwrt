@@ -1,0 +1,134 @@
+#!/bin/sh /etc/rc.common
+# Realtek RTL8367RB L2 Switch Station Table Maintenance & Radio Watchdog Daemon
+# Event-driven (iw event) + Differential Cache (link_time <= 4s) to eliminate MMIO flush storms.
+
+START=98
+
+FLUSH=/proc/rtl865x_l2flush
+PIDFILE=/var/run/dir842-l2flush.pid
+EVT_PIDFILE=/var/run/dir842-l2flush-evt.pid
+
+# 2.4 GHz vendor driver: parses hwaddr and link_time from /proc/*/sta_info -> "<mac>/<fresh>"
+l2f_vendor_stations() {
+	awk '
+	/^[[:space:]]*hwaddr:[[:space:]]*[0-9a-fA-F]{12}/ {
+		h = tolower($2)
+		mac = substr(h,1,2) ":" substr(h,3,2) ":" substr(h,5,2) ":" substr(h,7,2) ":" substr(h,9,2) ":" substr(h,11,2)
+		fresh = 0
+	}
+	/^[[:space:]]*link_time:[[:space:]]*[0-9]+/ {
+		if (mac != "") {
+			secs = ($2 * 60) + $4
+			if (secs <= 4) fresh = 1
+			print mac "/" fresh
+			mac = ""
+		}
+	}
+	END {
+		if (mac != "") print mac "/" fresh
+	}
+	' /proc/*/sta_info 2>/dev/null
+}
+
+# 5 GHz mac80211 driver: parses Station and connected time -> "<mac>/<fresh>"
+l2f_mac80211_stations() {
+	for d in /sys/class/ieee80211/*/device/net/*; do
+		[ -e "$d" ] || continue
+		ifname="${d##*/}"
+		iw dev "$ifname" station dump 2>/dev/null | awk '
+		/^Station [0-9a-fA-F:]{17}/ {
+			if (mac != "") print mac "/" fresh
+			mac = tolower($2)
+			fresh = 0
+		}
+		/^[[:space:]]*connected time:[[:space:]]*[0-9]+/ {
+			if ($3 + 0 <= 4) fresh = 1
+		}
+		END {
+			if (mac != "") print mac "/" fresh
+		}
+		'
+	done
+}
+
+# Instant event listener for 5 GHz mac80211 fast roaming
+l2f_event_listener() {
+	iw event 2>/dev/null | while read -r line; do
+		case "$line" in
+			*": new station "*)
+				mac="${line##* }"
+				case "$mac" in
+					[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F])
+						[ -e "$FLUSH" ] && echo "$mac" > "$FLUSH" 2>/dev/null || true
+						;;
+				esac
+				;;
+		esac
+	done
+}
+
+l2f_loop() {
+	local prev_macs=" "
+	local tick=0
+
+	while true; do
+		if [ -e "$FLUSH" ]; then
+			new_prev=" "
+			for item in $(l2f_vendor_stations; l2f_mac80211_stations); do
+				mac="${item%/*}"
+				fresh="${item#*/}"
+				[ -n "$mac" ] || continue
+				new_prev="${new_prev}${mac} "
+				case "$prev_macs" in
+					*" ${mac} "*)
+						if [ "$fresh" = "1" ]; then
+							echo "$mac" > "$FLUSH" 2>/dev/null || true
+						fi
+						;;
+					*)
+						echo "$mac" > "$FLUSH" 2>/dev/null || true
+						;;
+				esac
+			done
+			prev_macs="$new_prev"
+		fi
+
+	tick=$((tick + 1))
+	# Every 10s: keep WAN gateway L2 entry warm in case of ASIC recovery
+	if [ $((tick % 5)) -eq 0 ]; then
+		gw=$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')
+		[ -n "$gw" ] && ping -c 1 -W 1 "$gw" >/dev/null 2>&1 &
+	fi
+
+	# Every 30s: ensure 2.4 GHz wlan0 stays UP if enabled in UCI
+	if [ $((tick % 15)) -eq 0 ]; then
+		if [ "$(uci -q get wireless.radio1.disabled 2>/dev/null)" != "1" ] && [ -e /proc/wlan0/mib_all ]; then
+			if [ "$(cat /sys/class/net/wlan0/operstate 2>/dev/null)" = "down" ]; then
+				logger -t dir842-l2flush "wlan0 detected down; triggering wifi up radio1"
+				wifi up radio1 >/dev/null 2>&1 &
+			fi
+		fi
+	fi
+
+	sleep 2
+	done
+}
+
+start() {
+	oldpid="$(cat "$PIDFILE" 2>/dev/null)"
+	if [ -n "$oldpid" ] && kill -0 "$oldpid" 2>/dev/null &&
+	   grep -qs l2flush "/proc/$oldpid/cmdline" 2>/dev/null; then
+		return 0
+	fi
+
+	l2f_event_listener &
+	echo $! > "$EVT_PIDFILE"
+
+	l2f_loop &
+	echo $! > "$PIDFILE"
+}
+
+stop() {
+	[ -f "$EVT_PIDFILE" ] && { kill "$(cat "$EVT_PIDFILE" 2>/dev/null)" 2>/dev/null; rm -f "$EVT_PIDFILE"; }
+	[ -f "$PIDFILE" ] && { kill "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; rm -f "$PIDFILE"; }
+}
