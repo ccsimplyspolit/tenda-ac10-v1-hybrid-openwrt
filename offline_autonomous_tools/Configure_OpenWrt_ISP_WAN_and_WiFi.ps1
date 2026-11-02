@@ -401,9 +401,11 @@ uci -q set firewall.@defaults[0].flow_offloading='1' || true
 uci -q set firewall.@defaults[0].flow_offloading_hw='0' || true
 uci commit firewall
 
-# 2. Provision LAN DHCP Pool, Static Reservations & Apple RFC 9462 DDR Encrypted DNS Compatibility
+# 2. Provision LAN DHCP Pool, Static Reservations, WAN Shared-VLAN Socket Isolation & Apple RFC 9462 DDR Encrypted DNS
 uci -q set dhcp.@dnsmasq[0].rebind_protection='0' || true
 uci -q set dhcp.@dnsmasq[0].cachesize='1000' || true
+uci -q del_list dhcp.@dnsmasq[0].notinterface='eth0.1' 2>/dev/null || true
+uci add_list dhcp.@dnsmasq[0].notinterface='eth0.1'
 uci -q set dhcp.lan.start='$dhcpStart' || true
 uci -q set dhcp.lan.limit='$dhcpLimit' || true
 uci -q set dhcp.lan.leasetime='24h' || true
@@ -415,6 +417,15 @@ uci -q delete dhcp.lan.dhcp_option 2>/dev/null || true
 uci add_list dhcp.lan.dhcp_option='6,1.1.1.1,8.8.8.8,192.168.0.1'
 $dhcpStaticBlock
 uci commit dhcp
+
+uci -q delete uhttpd.main.listen_http 2>/dev/null || true
+uci add_list uhttpd.main.listen_http='192.168.0.1:80'
+uci add_list uhttpd.main.listen_http='127.0.0.1:80'
+uci -q delete uhttpd.main.listen_https 2>/dev/null || true
+uci -q set uhttpd.main.redirect_https='0' || true
+uci commit uhttpd
+uci -q set system.@system[0].log_size='256' || true
+uci commit system
 
 # 3. Provision 5 GHz Wi-Fi (radio0: VHT20 on Channel 36 + country=US 23 dBm avoids rtw88 VHT80 RF poll timeouts)
 uci -q set wireless.radio0.disabled='0' || true
@@ -472,19 +483,36 @@ for iface in `$(uci show wireless 2>/dev/null | grep "=wifi-iface" | cut -d"." -
 done
 uci commit wireless
 
-# 5. Persist hwnat=0 in /etc/init.d/dir842-asic (keeps ASIC router VLAN/L2 tables while preventing bridged Wi-Fi NAPT blackhole)
+# 5. Persist hwnat=0 & cloned WAN MAC poll in /etc/init.d/dir842-asic (keeps ASIC router VLAN/L2 tables + fabric_autoreset=3 while preventing bridged Wi-Fi NAPT blackhole)
 if [ -f /etc/init.d/dir842-asic ]; then
     sed -i 's|echo 1 > /sys/module/rtl819x/parameters/hwnat|echo 0 > /sys/module/rtl819x/parameters/hwnat|g' /etc/init.d/dir842-asic
-    chmod 0755 /etc/init.d/dir842-asic
-    grep -qxF '/etc/init.d/dir842-asic' /etc/sysupgrade.conf 2>/dev/null || echo '/etc/init.d/dir842-asic' >> /etc/sysupgrade.conf
+    if ! grep -q 'wan_want=' /etc/init.d/dir842-asic; then
+        awk '
+        /^\tsleep 2$/ && !done_wan {
+            print "\twan_want=`$(uci -q get network.wan.macaddr 2>/dev/null | tr \"A-F\" \"a-f\")"
+            print "\tif [ -n \"`$wan_want\" ]; then"
+            print "\t\ti=0; while [ `$i -lt 30 ]; do [ \"`$(cat /sys/class/net/eth0.1/address 2>/dev/null)\" = \"`$wan_want\" ] && break; i=`$((i+1)); sleep 1; done"
+            print "\tfi"
+            done_wan=1
+        }
+        { print }
+        ' /etc/init.d/dir842-asic > /tmp/dir842-asic.new && sh -n /tmp/dir842-asic.new && mv /tmp/dir842-asic.new /etc/init.d/dir842-asic
+    fi
+    chmod 0755 /etc/init.d/dir842-asic /etc/init.d/asic-wifi-settle /etc/init.d/dir842-l2flush 2>/dev/null || true
+    for _sf in /etc/init.d/dir842-asic /etc/init.d/asic-wifi-settle /lib/netifd/wireless/rtl8192cd.sh; do
+        grep -qxF "`$_sf" /etc/sysupgrade.conf 2>/dev/null || echo "`$_sf" >> /etc/sysupgrade.conf
+    done
 fi
+echo 3 > /sys/module/rtl819x/parameters/fabric_autoreset 2>/dev/null || true
 echo 0 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null || true
 echo 0 > /sys/module/rtl819x/parameters/hwnat_debug 2>/dev/null || true
 
-# 6. Reload Network, Firewall, DHCP, Wi-Fi & RTL8197FS Switch/VLAN ASIC
+# 6. Reload Network, Firewall, DHCP, Web UI, Wi-Fi & RTL8197FS Switch/VLAN ASIC
 /etc/init.d/network reload
 /etc/init.d/firewall reload 2>/dev/null || true
-/etc/init.d/dnsmasq reload 2>/dev/null || true
+/etc/init.d/dnsmasq restart 2>/dev/null || true
+/etc/init.d/uhttpd restart 2>/dev/null || true
+/etc/init.d/log reload 2>/dev/null || true
 wifi reload 2>/dev/null || true
 if [ -x /etc/init.d/dir842-asic ]; then
     (

@@ -388,31 +388,54 @@ assert "  gwr1200ac-v1)" in s
 s = s.replace("  gwr1200ac-v1)", ac10_net_case, 1)
 open(p_net, "w", encoding="utf-8").write(s)
 
-# 4. /etc/init.d/dir842-asic: support HW_NIC0_ADDR in wait_netif_mac() and keep hwnat=0 by default
+# 4. /etc/init.d/dir842-asic: poll BOTH eth0.2 LAN MAC (HW_NIC0_ADDR) AND eth0.1 cloned WAN MAC
+#    in wait_netif_mac() before gw_prog, keep fabric_autoreset=3 armed, and keep hwnat=0 by default
 #    so bridged Wi-Fi -> WAN flows use Linux software flow_offloading without ASIC NAPT blackholing
 p_asic = os.path.join(root, "etc/init.d/dir842-asic")
 s = open(p_asic, "r", encoding="utf-8").read()
+assert '*) want="" ;;' in s
+assert "\tdone\n\tsleep 2\n}" in s
 s = s.replace(
     '*) want="" ;;',
     '*) want=$(dd if=/dev/mtd1 bs=65536 count=1 2>/dev/null | tr \'\\0\' \'\\n\' | tr -d \'\\r\' | grep \'^HW_NIC0_ADDR=\' | head -n1 | cut -d= -f2 | sed \'s/../&:/g;s/:$//\' | tr \'A-F\' \'a-f\') ;;',
 )
+wan_poll_snippet = """\tdone
+\twan_want=$(uci -q get network.wan.macaddr 2>/dev/null | tr "A-F" "a-f")
+\tif [ -n "$wan_want" ]; then
+\t\ti=0
+\t\twhile [ $i -lt 30 ]; do
+\t\t\t[ "$(cat /sys/class/net/eth0.1/address 2>/dev/null)" = "$wan_want" ] && break
+\t\t\ti=$((i+1)); sleep 1
+\t\tdone
+\tfi
+\tsleep 2
+}"""
+s = s.replace("\tdone\n\tsleep 2\n}", wan_poll_snippet, 1)
 s = s.replace(
     'echo 1 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null',
     'echo 0 > /sys/module/rtl819x/parameters/hwnat 2>/dev/null\n\t\techo 0 > /sys/module/rtl819x/parameters/hwnat_debug 2>/dev/null',
 )
 open(p_asic, "w", encoding="utf-8").write(s)
 os.chmod(p_asic, 0o755)
+for _svc in ("etc/init.d/asic-wifi-settle", "etc/init.d/dir842-l2flush"):
+    _svc_p = os.path.join(root, _svc)
+    if os.path.exists(_svc_p):
+        os.chmod(_svc_p, 0o755)
 
 # 5. /etc/uci-defaults/99-dir842-m5: Switch Port 3 = WAN (vlan 1), Ports 0,1,2 = LAN (vlan 2),
 #    Tenda SSID/MAC (neutral fallback 50:0f:f5:00:00:05), bind radio0 by PCIe path (immune to phy0->phy1),
 #    VHT20 default on channel 36 + country=US (23 dBm, immune to rtw88 VHT80 RF poll timeouts),
-#    software flow_offloading=1, and clean IPv4 + RFC 9462 DDR DNS defaults for iOS/macOS compatibility.
+#    software flow_offloading=1, clean IPv4 + RFC 9462 DDR DNS defaults for iOS/macOS compatibility,
+#    WAN shared-VLAN socket isolation (dnsmasq notinterface=eth0.1, uhttpd LAN-only 192.168.0.1/127.0.0.1),
+#    and 256 KB ring buffer log_size.
 p_m5 = os.path.join(root, "etc/uci-defaults/99-dir842-m5")
 s = open(p_m5, "r", encoding="utf-8").read()
 assert "set network.@switch_vlan[-1].ports='4 6t'" in s
 assert "set network.@switch_vlan[-1].ports='0 1 2 3 6t'" in s
 s = s.replace("set network.@switch_vlan[-1].ports='4 6t'", "set network.@switch_vlan[-1].ports='3 6t'")
 s = s.replace("set network.@switch_vlan[-1].ports='0 1 2 3 6t'", "set network.@switch_vlan[-1].ports='0 1 2 6t'")
+s = s.replace("set wireless.radio0.htmode='HT20'", "set wireless.radio0.htmode='VHT20'")
+s = s.replace("set wireless.radio0.country='BR'", "set wireless.radio0.country='US'")
 s = s.replace("set wireless.default_radio0.ssid='DIR842-OpenWrt'", "set wireless.default_radio0.ssid='Tenda-AC10-5G'")
 s = s.replace(
     "DIR842_WIFI_MAC='02:11:22:33:44:56' ;;",
@@ -420,7 +443,7 @@ s = s.replace(
 )
 s = s.replace(
     "set wireless.default_radio0.macaddr=\"$DIR842_WIFI_MAC\"",
-    "set wireless.default_radio0.macaddr=\"$DIR842_WIFI_MAC\"\nset wireless.default_radio0.ifname='wlan1'",
+    "set wireless.default_radio0.macaddr=\"$DIR842_WIFI_MAC\"\nset wireless.default_radio0.ifname='wlan1'\nset wireless.default_radio0.wmm='1'\nset wireless.default_radio0.multicast_to_unicast='0'\nset wireless.default_radio0.disassoc_low_ack='0'\nset wireless.default_radio0.ieee80211w='0'",
 )
 phy_bind_snippet = """_ac10_phy=$(ls /sys/bus/pci/drivers/rtw_8822be/*/ieee80211 2>/dev/null | head -n1)
 [ -z "$_ac10_phy" ] && _ac10_phy=$(ls /sys/class/ieee80211 2>/dev/null | head -n1)
@@ -445,6 +468,8 @@ uci -q set firewall.@defaults[0].flow_offloading_hw='0'
 uci -q commit firewall
 uci -q set dhcp.@dnsmasq[0].rebind_protection='0'
 uci -q set dhcp.@dnsmasq[0].cachesize='1000'
+uci -q del_list dhcp.@dnsmasq[0].notinterface='eth0.1' 2>/dev/null || true
+uci -q add_list dhcp.@dnsmasq[0].notinterface='eth0.1'
 uci -q set dhcp.lan.ra='disabled'
 uci -q set dhcp.lan.dhcpv6='disabled'
 uci -q delete dhcp.lan.ra_slaac
@@ -452,7 +477,14 @@ uci -q delete dhcp.lan.ra_flags
 uci -q delete dhcp.lan.dhcp_option
 uci -q add_list dhcp.lan.dhcp_option='6,1.1.1.1,8.8.8.8,192.168.0.1'
 uci -q commit dhcp
+uci -q delete uhttpd.main.listen_http 2>/dev/null || true
+uci -q add_list uhttpd.main.listen_http='192.168.0.1:80'
+uci -q add_list uhttpd.main.listen_http='127.0.0.1:80'
+uci -q delete uhttpd.main.listen_https 2>/dev/null || true
+uci -q set uhttpd.main.redirect_https='0'
+uci -q commit uhttpd
 uci -q set system.@system[0].hostname='Tenda-AC10-V1'
+uci -q set system.@system[0].log_size='256'
 uci -q set system.@system[0].dir842_m5_seeded='1'"""
 s = s.replace(
     "uci -q set system.@system[0].dir842_m5_seeded='1'",
