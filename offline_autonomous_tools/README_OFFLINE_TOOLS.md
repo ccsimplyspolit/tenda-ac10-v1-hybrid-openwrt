@@ -1,74 +1,58 @@
-# Tenda AC10 V1.0 — 100% Autonomous Offline Recovery & Verification Suite
+# Автономные скрипты прошивки, автонастройки и отката (RU / EN)
 
-All tools in this folder run **100% offline** with **zero external dependencies** (no internet required, no `pip` packages, no Windows optional `tftp.exe` feature required) and enforce a strict `try / finally` network failsafe that **always restores your PC's physical Ethernet adapter (physical Ethernet NIC) back to automatic DHCP & DNS**, even if the router takes 20–30 minutes to recover or a script is interrupted with `Ctrl+C`.
+Все утилиты в этой папке написаны под чистую Windows 10 / 11 и работают **полностью без интернета**, без установки внешних пакетов `pip` и без включения дополнительного компонента Windows `tftp.exe`.
+
+Главная защита от головной боли: каждый скрипт оборачивает смену сетевых настроек в жёсткий блок `try / finally` — даже если роутер долго перезагружается, вы случайно закрыли окно или нажали `Ctrl+C`, сетевая карта вашего компьютера автоматически вернётся на получение IP и DNS по DHCP.
 
 ---
 
-## Quick One-Click Launchers (`.bat`)
+## Быстрый справочник по батникам (RU) | One-Click Launchers (EN)
 
-| Launcher | Purpose | Default Target |
+| Файл запуска | Что делает | Куда втыкать кабель и адрес |
 |---|---|---|
-| **`Offline_TFTP_Recovery_and_Flash.bat`** | Flashes stock recovery (`backups\Tenda_AC10_V1_Stock_TFTP_Recovery.bin`, `7,588,884` B) or a custom OpenWrt `cs6c` image to the Realtek Booter at `192.168.1.6:69`. Pre-validates headers, checksums (`0x0000`), and blocks lethal 2-segment `cs6c+hsqs` images before touching the network. | `192.168.1.6:69` (Connect cable to **LAN1 / LAN2 / LAN3**, never WAN) |
-| **`Flash_Hybrid_OpenWrt_4.14_TFTP.bat`** | 1-Click autonomous TFTP flasher for Hybrid OpenWrt 4.14 (`tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin`). Auto-elevates UAC, auto-detects firmware across multiple fallback directories, manages temporary firewall rules, and restores DHCP/DNS in `finally`. | `192.168.1.6:69` (LAN1/LAN2/LAN3) |
-| **`Configure_OpenWrt_ISP_WAN_and_WiFi.bat`** | Autonomous post-flash OpenWrt 4.14 ISP WAN MAC & Wi-Fi configurator. Dynamically parses cloned WAN MAC and Wi-Fi credentials from `backups\RouterCfm_optimized_v1.cfg`, connects to OpenWrt at `192.168.0.1` via SSH, configures `network.wan.macaddr`, `network.wan_eth0_1_dev.macaddr`, Wi-Fi SSIDs/WPA2-PSK, reloads services, and verifies WAN status. | `192.168.0.1` (OpenWrt `root@192.168.0.1` over LAN) |
-| **`Restore_Optimized_Config_and_WAN.bat`** | Restores `backups\RouterCfm_optimized_v1.cfg` (`25,369` B) to `192.168.0.1`, recovering the ISP-bound WAN MAC (`<YOUR_WAN_MAC>`), disabling phantom `br2`/`vlan3` (`iptv.stb.enable=0`), disabling `ucloud_v2`, setting `sys.maxconn=8192`, and setting `sys.timentpserver=time.google.com`. | `http://192.168.0.1` |
-| **`Emergency_Restore_PC_Network_DHCP.bat`** | Instant 3-second emergency failsafe that removes any static IP (`192.168.1.116` / `192.168.0.116`) and restores automatic DHCP and DNS on `Ethernet` (physical Ethernet NIC). | Local PC Adapter (`Ethernet`) |
-| **`Verify_All_Dumps_Chips_and_Backups.bat`** | Runs 81 cryptographic and structural checks across all flash dumps, bootloader/kernel headers, RF calibration (`xcap=27/46`, `RFE=6`), `vmlinux_stock.bin` `mib_table` keys, NVRAM configs, and backup archives. | Offline local files |
+| **`Flash_Hybrid_OpenWrt_4.14_TFTP.bat`** | Прошивает **Hybrid OpenWrt 4.14.187** (`tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin`) через загрузчик в 1 клик. Сам запрашивает права администратора, находит образ, открывает временное правило для UDP в брандмауэре, льёт прошивку на `192.168.1.6:69` и после старта роутера возвращает DHCP. | Строго жёлтый порт **LAN 1, LAN 2 или LAN 3** (синий WAN в загрузчике обесточен!) |
+| **`Configure_OpenWrt_ISP_WAN_and_WiFi.bat`** | Переносит настройки провайдера и Wi-Fi в свежепрошитый OpenWrt за 10 секунд без интернета. Читает ваш стоковый бэкап `RouterCfm.cfg`, заходит по локальному SSH на `root@192.168.0.1` и прописывает клонированный WAN MAC, статику/DHCP WAN, DNS, имена и пароли Wi-Fi 2.4/5 ГГц и привязки IP. | Любой порт **LAN 1–3** (роутер уже загружен на `192.168.0.1`) |
+| **`Offline_TFTP_Recovery_and_Flash.bat`** | Откатывает роутер обратно на чистую заводскую прошивку Tenda `V15.03.06.23` (`Tenda_AC10_V1_Stock_TFTP_Recovery.bin`) или заливает любой указанный образ с предварительной проверкой заголовка и контрольной суммы (опасные двухсегментные `cs6c+hsqs` блокируются до выхода в сеть). | Жёлтый порт **LAN 1, LAN 2 или LAN 3** (`192.168.1.6:69`) |
+| **`Restore_Optimized_Config_and_WAN.bat`** | Заливает на стоковую прошивку профиль `Stock+` (`RouterCfm_optimized_v1.cfg` / `sanitized.cfg`): восстанавливает клонированный MAC, отключает облачного стукача `ucloud_v2`, убирает паразитный мост `br2` и расширяет таблицу сессий до `8192`. | `http://192.168.0.1` (на заводской прошивке Tenda) |
+| **`Emergency_Restore_PC_Network_DHCP.bat`** | За 3 секунды снимает забытый статический IP (`192.168.1.x`) с физической сетевой карты ПК и включает автополучение IP/DNS по DHCP. | Локальная сетевая карта ПК (`Ethernet`) |
+| **`Verify_All_Dumps_Chips_and_Backups.bat`** | Прогоняет 81 проверку целостности по локальным дампам, заголовкам образов и калибровкам `mtd1` (`xcap`, `RFE=6`). | Локальная проверка файлов |
 
 ---
 
-## Autonomous Post-Flash OpenWrt Provisioning (`Configure_OpenWrt_ISP_WAN_and_WiFi.bat` / `.ps1`)
+## Как перенести настройки провайдера без интернета (`Configure_OpenWrt_ISP_WAN_and_WiFi.bat`)
 
-### Purpose
-When transitioning the Tenda AC10 V1.0 to Hybrid OpenWrt 4.14, the router boots with a default MAC address (`HW_NIC0_ADDR + 2`). Because the ISP binds internet access strictly to your registered/cloned WAN MAC (`wan1.macaddr`), internet connectivity will not function until the cloned WAN MAC is provisioned into OpenWrt. Furthermore, wireless radios default to generic or unconfigured states.
+У большинства кабельных провайдеров доступ в сеть жёстко привязан к MAC-адресу вашего роутера. После чистой установки OpenWrt роутер поднимается с заводским `HW_NIC0_ADDR + 2`, поэтому интернет не появится, пока не прописать старый MAC (и статический IP/шлюз, если у вас статика).
 
-`Configure_OpenWrt_ISP_WAN_and_WiFi.bat` is a **100% autonomous, zero-configuration post-flash tool** that restores full ISP connectivity and wireless access in under 10 seconds without manual LuCI / SSH configuration.
+### Пошагово за минуту:
+1. До прошивки сохраните файл настроек из родной веб-панели Tenda (*Системные настройки -> Резервная копия -> Сохранить*, получится файл `RouterCfm.cfg`) и положите его рядом со скриптами или в папку `backups\`.
+2. Прошейте OpenWrt (`Flash_Hybrid_OpenWrt_4.14_TFTP.bat` или `webupgrade.bin` через браузер) и подождите **90–120 секунд**, пока роутер отформатирует раздел настроек `JFFS2` и выдаст вашему ПК адрес из `192.168.0.x`.
+3. Вставьте кабель провайдера в синий порт **WAN**.
+4. Дважды кликните **`Configure_OpenWrt_ISP_WAN_and_WiFi.bat`**.
+5. Скрипт сам вытащит из `RouterCfm.cfg` ваш клонированный MAC, настройки WAN (DHCP или статику), DNS, ваши старые имена сетей Wi-Fi и пароли WPA2, аккуратно пропишет всё через `uci` по SSH (маскируя пароли звёздочками в окне консоли) и проверит, поднялся ли внешний линк.
 
-### Zero-Argument Autonomous Workflow
-1. Complete firmware flashing with `Flash_Hybrid_OpenWrt_4.14_TFTP.bat`.
-2. Wait ~90–120 seconds for Hybrid OpenWrt 4.14 to boot. Your PC Ethernet adapter automatically receives an IP in `192.168.0.0/24` from OpenWrt DHCP.
-3. Plug your ISP Ethernet cable into the **WAN port** (blue port / Switch Port 3).
-4. Double-click **`Configure_OpenWrt_ISP_WAN_and_WiFi.bat`** (or run `powershell -ExecutionPolicy Bypass -File Configure_OpenWrt_ISP_WAN_and_WiFi.ps1`).
-5. The tool automatically:
-   - Locates `backups\RouterCfm_optimized_v1.cfg` (or sanitized configuration).
-   - Extracts your cloned ISP WAN MAC (`wan1.macaddr`) and 2.4 GHz / 5 GHz Wi-Fi SSIDs and WPA2-PSK passwords.
-   - Connects to OpenWrt at `192.168.0.1` via Windows built-in `ssh.exe` (`root@192.168.0.1`).
-   - Executes UCI commands to set `network.wan.macaddr` and `network.wan_eth0_1_dev.macaddr`.
-   - Configures Wi-Fi interfaces (SSID, WPA2-PSK encryption, enables radios).
-   - Reloads network and wireless subsystems (`/etc/init.d/network reload` and `wifi reload`).
-   - Verifies WAN interface status and reports leased IP.
+### Ключи командной строки (если хотите задать параметры вручную без `RouterCfm.cfg`):
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Configure_OpenWrt_ISP_WAN_and_WiFi.ps1 `
+  -WanMac "AA:BB:CC:DD:EE:FF" `
+  -Ssid5G "MyHome_5G" -Key5G "MyStrongPass123" `
+  -Ssid2G "MyHome_2G" -Key2G "MyStrongPass123"
+```
 
-### Command-Line Parameters
-For custom setups or dry-run validation, the script supports explicit parameters:
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `-ConfigPath` | string | Auto-discovered | Path to `RouterCfm_optimized_v1.cfg` or sanitized config file |
-| `-TargetIp` | string | `192.168.0.1` | IP address of OpenWrt router |
-| `-SshUser` | string | `root` | SSH username |
-| `-TargetPort` | int | `22` | SSH port |
-| `-WanMac` | string | Auto-extracted | Override ISP WAN MAC address (e.g. `50:0F:F5:00:00:01`) |
-| `-Ssid2G` | string | Auto-extracted | Override 2.4 GHz Wi-Fi SSID |
-| `-Ssid5G` | string | Auto-extracted | Override 5 GHz Wi-Fi SSID |
-| `-Key2G` | string | Auto-extracted | Override 2.4 GHz WPA2-PSK password (minimum 8 characters) |
-| `-Key5G` | string | Auto-extracted | Override 5 GHz WPA2-PSK password (minimum 8 characters) |
-| `-VerifyOnly` | switch | `false` | Parses config and validates parameters without network interaction |
-| `-DryRun` | switch | `false` | Displays the generated UCI command sequence without SSH transmission |
-| `-Force` | switch | `false` | Bypasses safety confirmations and allows fallback defaults |
-
-### OPSEC & Information Safety
-- Zero hardcoded credentials or MAC addresses in script source code.
-- Console output masks Wi-Fi passwords (`******** (N chars)`) to protect credentials during screen sharing or logging.
-- Fully compatible with sanitized configuration templates (`RouterCfm_optimized_sanitized.cfg`).
+Поддерживаемые флаги `Configure_OpenWrt_ISP_WAN_and_WiFi.ps1`:
+- `-ConfigPath <путь>` — путь к вашему `RouterCfm.cfg` (по умолчанию ищется автоматически).
+- `-TargetIp <IP>` — адрес роутера (по умолчанию `192.168.0.1`).
+- `-WanMac <XX:XX:XX:XX:XX:XX>` — явно задать клонированный MAC на интерфейс WAN.
+- `-Ssid5G` / `-Key5G` / `-Ssid2G` / `-Key2G` — явно задать имена и пароли сетей Wi-Fi (минимум 8 символов).
+- `-VerifyOnly` — только проверить чтение `RouterCfm.cfg`, ничего не отправляя по сети.
+- `-DryRun` — показать сгенерированные команды `uci` на экране без подключения по SSH.
 
 ---
 
-## Verified Hardware & Bootloader Facts (Reverse-Engineered from `booter_stage2_v3.4.11B.9_0x80000000.bin`)
+## English Quick Reference (`Configure_OpenWrt_ISP_WAN_and_WiFi.ps1` & TFTP Suite)
 
-1. **Bootloader Drops ICMP Ping (`0x80001010..0x80001018`)**:
-   - Realtek Booter v3.4.11B.9 checks `ip_hdr[9] == 0x11` (UDP) and drops all ICMP packets. `ping 192.168.1.6` will **never** reply in bootloader mode. `Offline_TFTP_Recovery_and_Flash.ps1` probes `192.168.1.6:69` directly using RFC 1350 UDP TFTP `WRQ` packets.
-2. **Switch Port 3 (WAN) Powered Down in Bootloader (`0x8000ec6c..0x8000ed58`)**:
-   - `lan_wan_isolation` sets LAN mask `0xF7` and writes `0x0936` to PHY register `0x1B03` to power down Switch Port 3 (WAN). Always connect your Ethernet cable to **LAN1, LAN2, or LAN3** (Switch Ports 2, 1, or 0).
-3. **`AutoBurn` (`0x800019d0`) & `check_image` (`0x8000dd10`)**:
-   - Factory Stock TFTP image (`Tenda_AC10_V1_Stock_TFTP_Recovery.bin`, `7,588,884` B, SHA-256 `a7d4d27f7b1d52526e24348a6a21c5a56740d41b357b17c9e3bc4d8db9f9b0fa`) uses 2-segment `cr6c` (`2,145,298` B) + `hsqs` (`5,443,586` B), both with 16-bit BE additive checksum `0x0000`.
-   - Custom OpenWrt `cs6c` images **must be single-segment** (`file_size == 16 + seg_len`) because a 2-segment `cs6c` + `hsqs` image triggers a bootloader bug at `0x80001c2c` (`move $s7, $s2` with `$s2=0`) that erases flash offset `0x00000000`.
+1. **Flash Hybrid OpenWrt 4.14.187 in 1 click:** Connect Ethernet to **LAN 1–3** (never blue WAN — bootloader powers down Switch Port 3 PHY at `0x8000ED48`), run **`Flash_Hybrid_OpenWrt_4.14_TFTP.bat`**, hold **RST/WPS** while plugging in 12V power for **7–10 seconds**, then release. Do not wait for `ping 192.168.1.6` — Realtek Booter drops all non-UDP packets at `0x80001010`; our Python TFTP engine (`tftp_recovery_engine.py`) probes ARP + UDP port 69 directly.
+2. **Migrate ISP WAN MAC & Wi-Fi offline:** Once OpenWrt boots at `192.168.0.1`, double-click **`Configure_OpenWrt_ISP_WAN_and_WiFi.bat`**. It parses your saved Tenda `RouterCfm.cfg` locally and provisions cloned WAN MAC, DHCP/static WAN IP, DNS, static DHCP leases, and 2.4/5 GHz Wi-Fi credentials over built-in Windows `ssh.exe` while masking secrets in console output.
+3. **Run the offline loopback self-tests (40 checks, zero hardware required):**
+   ```powershell
+   python -B .\Test_Offline_Autonomous_Tools_Loopback.py
+   ```

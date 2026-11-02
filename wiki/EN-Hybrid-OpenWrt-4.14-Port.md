@@ -1,289 +1,44 @@
-# Hybrid OpenWrt 4.14 Port Architecture & Deployment
+# Hybrid OpenWrt 4.14.187 Port: Architecture, Screenshots & 1-Click Setup (EN)
 
-> **Section:** [Home (EN)](EN-Home) | [Russian Version](RU-Hybrid-OpenWrt-4.14-Port) | [Wiki Portal](Home)
+> **Navigation:** [Home (EN)](EN-Home) | [Русская версия](RU-Hybrid-OpenWrt-4.14-Port) | [Wiki Portal](Home)
 
-The **Hybrid OpenWrt 4.14 Port** provides an enterprise-grade, modern operating system for the **Tenda AC10 V1.0**. It combines a modernized **Linux Kernel 4.14 (MIPS32 Little-Endian)** and the **OpenWrt 19.07 userland** with Realtek's proprietary ASIC Hardware NAT acceleration (`rtl819x_hwnat`) and monolithic wireless HAL (`rtl8192cd`).
-
----
-
-## 1. Executive Architecture & Hybrid Rationale
-
-Historically, users attempting to run upstream Linux kernels (4.19, 5.x, or 6.x) on Realtek RTL8197FS routers faced two catastrophic deal-breakers:
-1. **Absence of Hardware NAT Drivers**: Upstream OpenWrt relies exclusively on software packet forwarding or generic flow offloading. On the 1.0 GHz MIPS 24KEc core, software NAT caps routed throughput at approximately **140–400 Mbps** while saturating the CPU at 100%. Upstream cannot deliver gigabit speeds.
-2. **The Blank eFuse Dilemma**: The Realtek RTL8822BE 5 GHz PCIe card ships from the factory with an unburned physical eFuse (`0xFF`). Mainline `mac80211` / `rtw88` drivers refuse to initialize the device, returning `error code 5 (invalid eFuse header)`.
-
-```
-+-----------------------------------------------------------------------------------+
-|                     Hybrid OpenWrt 4.14 Operating Architecture                    |
-|                                                                                   |
-|  +-----------------------------------------------------------------------------+  |
-|  | Modern OpenWrt 19.07 Userland: LuCI, uhttpd, rpcd, opkg, dropbear (SSH)     |  |
-|  | - Complete immunity to vendor backdoors & CVE-2026-11405                    |  |
-|  | - Full package repository access (WireGuard, Adblock, SQM QoS, etc.)        |  |
-|  +-----------------------------------------------------------------------------+  |
-|                                        |                                          |
-|                                        v                                          |
-|  +-----------------------------------------------------------------------------+  |
-|  | Linux Kernel 4.14.221 LTS (MIPS32 Release 2, Little-Endian 'mipsel')        |  |
-|  |                                                                             |  |
-|  |  +--------------------------------+   +----------------------------------+  |  |
-|  |  | rtl819x_hwnat ASIC Offload     |   | rtl8192cd Monolithic Wi-Fi HAL   |  |  |
-|  |  | - Table 0x09 TLU Flow SRAM     |   | - 802.11ac Wave 2 VHT80 (866.7M) |  |  |
-|  |  | - Host-numeric byte order fix  |   | - Skyworth RFE Type 6 PA/LNA     |  |  |
-|  |  | - Line-Rate 940 Mbps @ 0.5% CPU|   | - Dynamic set-mib.sh Injection   |  |  |
-|  |  +--------------------------------+   +----------------------------------+  |  |
-|  +-----------------------------------------------------------------------------+  |
-|                                        |                                          |
-|                                        v                                          |
-|  +-----------------------------------------------------------------------------+  |
-|  | Hardware: Realtek RTL8197FS-VE5 SoC + RTL8822BE PCIe + RTL8367RB Switch     |  |
-|  +-----------------------------------------------------------------------------+  |
-+-----------------------------------------------------------------------------------+
-```
-
-The Hybrid Port solves this dilemma by bridging modern OpenWrt system services and security with Realtek's high-speed silicon acceleration drivers.
+**Hybrid OpenWrt 4.14.187 (`v4.14.187-r2-ac10-hybrid`)** pairs **OpenWrt 19.07 userland + LuCI** (`http://192.168.0.1`, Dropbear SSH, `fw3`, persistent `JFFS2` overlay) with a patched **Linux 4.14.187** kernel tailored to the Tenda AC10 V1.0's `RTL8197FS` SoC, `RTL8367RB` switch, and `RTL8822BE` 5 GHz PCIe radio.
 
 ---
 
-## 2. Hardware Abstraction & Verified Device Tree (`tenda-ac10-v1.dts`)
+## 1. Live LuCI Web Panel Screenshots
 
-Hardware configuration is declared cleanly via OpenFirmware Device Tree Source. Below is the verified production DTS specification:
+| System Overview (`Status -> Overview`) | 5 GHz `23 dBm` Wireless (`Network -> Wireless`) |
+|---|---|
+| ![Overview](https://raw.githubusercontent.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/main/docs/images/01_luci_status_overview.png) | ![Wireless](https://raw.githubusercontent.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/main/docs/images/02_luci_wireless_5ghz.png) |
 
-```dts
-/dts-v1/;
-
-#include "rtl8197f.dtsi"
-#include <dt-bindings/gpio/gpio.h>
-#include <dt-bindings/input/input.h>
-
-/ {
-    model = "Tenda AC10 V1.0";
-    compatible = "tenda,ac10-v1", "realtek,rtl8197f-soc";
-
-    aliases {
-        led-boot = &led_sys;
-        led-failsafe = &led_sys;
-        led-running = &led_sys;
-        led-upgrade = &led_sys;
-    };
-
-    memory@0 {
-        device_type = "memory";
-        reg = <0x00000000 0x04000000>; /* 64 MB Integrated DDR2 SDRAM */
-    };
-
-    keys {
-        compatible = "gpio-keys";
-
-        reset {
-            label = "reset";
-            gpios = <&gpio1 22 GPIO_ACTIVE_LOW>; /* GPIO 54: Hardware Reset */
-            linux,code = <KEY_RESTART>;
-        };
-
-        wps {
-            label = "wps";
-            gpios = <&gpio1 24 GPIO_ACTIVE_LOW>; /* GPIO 56: Wi-Fi / WPS */
-            linux,code = <KEY_WPS_BUTTON>;
-        };
-    };
-
-    leds {
-        compatible = "gpio-leds";
-
-        led_sys: sys {
-            label = "blue:sys";
-            gpios = <&gpio1 25 GPIO_ACTIVE_LOW>; /* GPIO 57: System Status */
-        };
-
-        wps {
-            label = "blue:wps";
-            gpios = <&gpio1 1 GPIO_ACTIVE_LOW>;  /* GPIO 33: WPS LED */
-        };
-    };
-};
-
-&spi0 {
-    status = "okay";
-
-    flash@0 {
-        compatible = "jedec,spi-nor";
-        reg = <0>;
-        spi-max-frequency = <41666667>; /* 41.67 MHz */
-
-        partitions {
-            compatible = "fixed-partitions";
-            #address-cells = <1>;
-            #size-cells = <1>;
-
-            partition@0 {
-                label = "bootloader";
-                reg = <0x00000000 0x00020000>; /* 128 KB */
-                read-only;
-            };
-
-            partition@20000 {
-                label = "calibration";
-                reg = <0x00020000 0x00010000>; /* 64 KB Factory RF MIB */
-                read-only;
-            };
-
-            partition@30000 {
-                label = "firmware";
-                reg = <0x00030000 0x007B0000>; /* 7,872 KB Firmware Slot */
-            };
-
-            partition@7e0000 {
-                label = "cfm";
-                reg = <0x007E0000 0x00020000>; /* 128 KB NVRAM */
-                read-only;
-            };
-        };
-    };
-};
-
-&switch {
-    status = "okay";
-    compatible = "realtek,rtl8367rb-smi";
-    realtek,smi-mdc-gpio = <&gpio0 18 GPIO_ACTIVE_HIGH>; /* SMI MDC */
-    realtek,smi-mdio-gpio = <&gpio0 19 GPIO_ACTIVE_HIGH>; /* SMI MDIO */
-    realtek,smi-reset-gpio = <&gpio1 26 GPIO_ACTIVE_LOW>;  /* GPIO 58 Switch Reset */
-
-    ports {
-        #address-cells = <1>;
-        #size-cells = <0>;
-
-        port@0 { reg = <0>; label = "lan1"; };
-        port@1 { reg = <1>; label = "lan2"; };
-        port@2 { reg = <2>; label = "lan3"; };
-        port@3 { reg = <3>; label = "wan"; };
-
-        port@6 {
-            reg = <6>;
-            label = "cpu";
-            ethernet = <&gmac0>;
-            phy-mode = "rgmii";
-            rx-internal-delay-ps = <2000>; /* 2.0 ns Rx Delay */
-            tx-internal-delay-ps = <0>;
-        };
-    };
-};
-```
+| `RTL8367RB` VLAN Switch (`Network -> Switch`) | Software Flow Offloading (`Network -> Firewall`) |
+|---|---|
+| ![Switch](https://raw.githubusercontent.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/main/docs/images/04_luci_switch_vlans.png) | ![Firewall](https://raw.githubusercontent.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/main/docs/images/05_luci_firewall_offload.png) |
 
 ---
 
-## 3. Dynamic Calibration Injection Architecture (`set-mib.sh`)
+## 2. What's Fixed Out of the Box in `r2`
 
-Because the RTL8822BE 5 GHz PCIe card possesses an unburned physical eFuse (`0xFF`), calibration must be dynamically extracted from SPI Flash partition `calibration` (`mtd1` / `mtd2`) and injected into the driver at boot:
-
-### 3.1 Flash Scanning & MAC Address Allocation Scheme
-In accordance with Realtek BSP conventions and 4PDA post #3016, MAC addresses are allocated from a single base address identified by the string `HW_NIC0_ADDR=` in partition `mtd1` (offsets `0x2086F`..`0x2087A`):
-- **LAN Bridge / Switch CPU (`eth0.2`)**: Base MAC + 0 (`HW_NIC0_ADDR`).
-- **2.4 GHz Wi-Fi (`wlan0`)**: Base MAC + 1 (`HW_WLAN1_WLAN_ADDR`).
-- **WAN Interface (`eth0.1`)**: Base MAC + 2 (assigned to prevent clash with wireless).
-- **5 GHz Wi-Fi (`wlan1`)**: Base MAC + 5 (`HW_WLAN0_WLAN_ADDR`).
-
-Neither the bootloader nor the Linux kernel checks CRC32 over `mtd1`. The initialization script `tools/scripts/set-mib.sh` scans dynamically for the `HW_NIC0_ADDR=` string rather than relying on brittle hardcoded offsets:
-
-```sh
-#!/bin/sh
-# /lib/wifi/set-mib.sh - Dynamic Calibration & MIB Injection for Tenda AC10 V1.0
-
-CAL_DEV="/dev/mtd1"
-[ -c /dev/mtdblock1 ] && CAL_DEV="/dev/mtdblock1"
-
-# Extract base MAC from calibration partition:
-BASE_MAC=$(strings "$CAL_DEV" | grep "^HW_NIC0_ADDR=" | head -n 1 | cut -d'=' -f2 | tr -d '\r\n')
-
-if [ -z "$BASE_MAC" ]; then
-    BASE_MAC="00:E0:4C:81:97:00"
-fi
-
-# Set interface MACs dynamically:
-ip link set dev eth0 address "$BASE_MAC"
-
-# Inject 5 GHz Radio (wlan1 - RTL8822BE) MIB parameters:
-iwpriv wlan1 set_mib rfe_type=6
-iwpriv wlan1 set_mib xcap=27
-iwpriv wlan1 set_mib manual_edca=1
-iwpriv wlan1 disable_txsc=1
-
-# Inject 2.4 GHz Radio (wlan0 - RTL8197FS) MIB parameters:
-iwpriv wlan0 set_mib rfe_type=5
-iwpriv wlan0 set_mib manual_edca=1
-iwpriv wlan0 disable_txsc=1
-```
+1. **Full-Power 5 GHz `RTL8822BE` (`Skyworth SE5003L1` RFE Type 6):**
+   - Tenda left the `RTL8822BE` OTP eFuse blank (`0xFF`), causing unpatched `rtw88` to drop TX/RX by `-17 dB` (`RFE 0`) with `xtal_cap=0`. We binary-patched `rtw88_8822b.ko` ELF relocations to add `rfe_info[6]` (`rtw8822b_config_rfe_efem`, BB regs `0x82C/0x830/0x838/0x83C`), and `/bin/set-mib.sh` injects each unit's factory `HW_WLAN0_11N_XCAP` and MAC from `/dev/mtd1` on boot.
+   - Default profile is locked to **`VHT20`, Channel `36`, `23 dBm` (200 mW)** (`ifname='wlan1'` pinned by PCIe path) for zero link drops — avoiding the B-cut RF register `0x33` poll timeout seen at 80 MHz (`VHT40`/`VHT80` remain selectable in LuCI).
+2. **Simultaneous Wired + Wi-Fi Routing (`hwnat=0` + Software Flow Offloading):**
+   - Enabling `rtl819x_hwnat` (`hwnat=1`) delivers `940 Mbps` wired NAT at `0.5%` CPU, but its ASIC TLU blackholes software-bridged Wi-Fi frames crossing `br-lan` (`wlan1 -> eth0.1`). Shipping `hwnat=0` + `firewall.flow_offloading='1'` (while keeping `dir842.asic.role='router'` and `fabric_autoreset=3`) gives **~350–500 Mbps** across wired and Wi-Fi together out of the box, with 1-command `echo 1 > /sys/module/rtl819x/parameters/hwnat` available for wired-only gigabit setups.
+3. **Cold-Boot Cloned WAN MAC Sync (`wait_netif_mac`):**
+   - `/etc/init.d/dir842-asic` waits for both `eth0.2` (LAN) and cloned `eth0.1` (`network.wan.macaddr`) before programming `gw_prog`.
+4. **Odd WAN Port 3 & `GPIO 58` Switch Reset:**
+   - `tenda-ac10-v1.dts` binds switch reset `<&gpio1 26 GPIO_ACTIVE_LOW>` (`GPIO 58`), paired with 9 MIPS32 LE `vmlinux` patches fixing odd `Port 3` WAN PVID upper-halfword shift and L2 masks.
+5. **Apple iOS Encrypted DNS (RFC 9462 DDR) & WAN Socket Lockdown:**
+   - Removed unrouted `ula_prefix` and set `dhcp_option '6,1.1.1.1,8.8.8.8,192.168.0.1'` for instant HTTP/3 QUIC DoH without iOS warnings; `uhttpd` and `dnsmasq` are isolated from `eth0.1`.
+6. **Honest 2.4 GHz Note:**
+   - 2.4 GHz uses the donor DIR-842 R1 `rtl8192cd.ko` module without `Skyworks SKY85303-11` PA tables, so 2.4 GHz range is short-room only. Use 5 GHz as your primary band.
 
 ---
 
-## 4. Hardware NAT Offload & Netfilter Integration
+## 3. Flashing & 1-Click Offline ISP Migration
 
-To achieve line-rate gigabit routing, the kernel tree incorporates the Realtek ASIC Table Lookup Unit engine (`rtl819x_hwnat.c`).
-
-### 4.1 The Conntrack Integration Architecture
-Whenever a transit connection completes its initial three-way handshake (`TCP SYN/ACK`) or achieves two-way UDP flow, Linux Netfilter marks the conntrack state as `IPS_CONFIRMED`.
-
-The hook function `rtl865x_handle_nat` intercepts this transition, extracts the 5-tuple, transforms Big-Endian network bytes into host-numeric Little-Endian words, and programs ASIC NAPT SRAM Table `0x09` at MMIO `0xBB804418`. Subsequent packets traverse the ASIC in **~1.0 nanosecond**, entirely bypassing the Linux CPU networking stack.
-
-### 4.2 Benchmark Verification
-Running `iperf3 -c <server> -P 10` through the router yields:
-- **Throughput**: **940.8 Mbps** bidirectional wire-speed.
-- **CPU Load**: **0.5%** during active line-rate transfer.
-- **Latency**: Sub-millisecond ping under sustained saturating load.
-
----
-
-## 5. Security Hardening & Vulnerability Eradication
-
-Migrating to Hybrid OpenWrt 4.14 completely eliminates the security defects of factory firmware:
-
-1. **Elimination of `CVE-2026-11405`**: Legacy web handlers (`R7WebsSecurityHandler`) and backdoor query checks are non-existent. Management is handled strictly by OpenWrt's hardened `uhttpd` web server and `rpcd` session infrastructure.
-2. **Purging of Undocumented Endpoints**: `/cgi-bin/DownloadFlash` and `/goform/telnet` are eradicated. No unauthenticated flash extraction or hardcoded credentials (`root:Fireitup`) exist.
-3. **Unified Default IP (`192.168.0.1`)**: In accordance with 4PDA discussion #3572, the default network configuration is patched directly in `./target/linux/rtkmipsel/base-files/etc/config/network` to `192.168.0.1`, matching standard Tenda network topology and avoiding the `192.168.1.12` artifact.
-
----
-
-## 6. Step-by-Step Installation & Upgrade Guide
-
-Two binary images are provided in the [Releases](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases) area:
-- `tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin`: For direct installation from the stock vendor Web UI.
-- `tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin`: For clean installation via emergency TFTP recovery mode.
-
-### Method A: Upgrading from Stock Vendor Web UI
-1. Download `tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin`.
-2. Connect your PC to the router via ethernet and open `http://192.168.0.1/` in your browser.
-3. Navigate to **Administration** -> **Firmware Upgrade**.
-4. Click **Browse**, select `tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin`, and click **Upgrade**.
-5. The vendor web daemon verifies the `0x00030028` model signature and begins flashing. **DO NOT REMOVE POWER.**
-6. The router will flash the image and reboot in approximately 3 minutes.
-7. Open `http://192.168.0.1/` to access the modern LuCI web interface.
-
-### Method B: Flashing via Emergency TFTP
-1. Connect your PC to **LAN Port 1** (disconnect the WAN cable).
-2. Assign your PC a static IP address: `192.168.1.100`, subnet mask `255.255.255.0`.
-3. Power off the router. Press and hold the **RST/WPS button**, power on the router, **hold for 15 seconds**, and release.
-4. Execute via command prompt:
-   ```sh
-   python tools/autonomous_recovery/flash_firmware.py --image releases/tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin
-   ```
-5. Wait for the automatic upload, flash, and reboot cycle. Reset your PC to DHCP to obtain an address from `192.168.0.1`.
-
----
-
-## 7. 1-Click Autonomous ISP & Wi-Fi Settings Migration (Zero Internet Required)
-
-To automatically migrate your ISP and wireless configuration from your stock `RouterCfm.cfg` backup immediately after flashing Hybrid OpenWrt 4.14.187, use the zero-dependency offline scripts in `offline_autonomous_tools`:
-
-1. **1-Click TFTP Bootloader Flasher (`192.168.1.6:69`):**
-   ```cmd
-   offline_autonomous_tools\Flash_Hybrid_OpenWrt_4.14_TFTP.bat
-   ```
-2. **1-Click Post-Flash ISP WAN, DNS, DHCP & Wi-Fi Provisioner (`192.168.0.1:22`):**
-   ```cmd
-   offline_autonomous_tools\Configure_OpenWrt_ISP_WAN_and_WiFi.bat
-   ```
-   This script parses your local `RouterCfm.cfg` backup and configures OpenWrt over local SSH (`uci`):
-   - Cloned ISP `WAN MAC` (`network.wan.macaddr` and `eth0.1`), `DHCP` protocol, and `MTU`;
-   - Custom upstream `DNS` servers (`1.1.1.1`, `8.8.8.8`);
-   - `LAN DHCP` pool parameters and `Static DHCP` reservations (`dhcp.@host`);
-   - Dual-band **2.4 GHz** & **5 GHz** `SSID` names, radio channels, and `WPA2-PSK` passphrases.
+1. Save a backup of your stock Tenda `RouterCfm.cfg` before flashing if your ISP locks to a cloned WAN MAC.
+2. Flash **`tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin`** directly from the stock Tenda Web UI (`192.168.0.1`), OR run **`offline_autonomous_tools\Flash_Hybrid_OpenWrt_4.14_TFTP.bat`** as Administrator with Ethernet plugged into **LAN 1–3** while holding `RST/WPS` at power-on for 7–10 seconds.
+3. Wait **90–120 seconds** on first boot while `80_mount_root` formats a clean `JFFS2` overlay on `mtd5`.
+4. Plug your ISP cable into blue **WAN** and run **`offline_autonomous_tools\Configure_OpenWrt_ISP_WAN_and_WiFi.bat`** to migrate cloned WAN MAC, WAN IP/DNS, static DHCP leases, and Wi-Fi SSIDs/passwords over local SSH in 10 seconds.
