@@ -1,35 +1,43 @@
-# Release v4.14.187-ac10-hybrid: Tenda AC10 V1.0 Hybrid OpenWrt 4.14 Production Build
+# Release v4.14.187-r2-ac10-hybrid: Tenda AC10 V1.0 Hybrid OpenWrt 4.14 Hardened Production Build (RU / EN)
 
-**Target Device**: Tenda AC10 V1.0 (Realtek RTL8197FS-VE5 + RTL8822BE + RTL8367RB-VB)  
-**Linux Kernel**: 4.14.187 (MIPS 24KEc, mipsel)  
-**OpenWrt Userland**: OpenWrt 19.07 with LuCI Web Interface  
+**Target Device / Устройство**: Tenda AC10 **V1.0 ONLY** (`Realtek RTL8197FS-VE5` + `RTL8822BE` + `RTL8367RB-VB`, 8 MB SPI NOR, 64 MB DDR2 SiP) — **NEVER flash on V2.0 / V3.0 (eCos, 2 MB)!**  
+**Linux Kernel**: `4.14.187` (`MIPS 24KEc`, `mipsel`) | **OpenWrt Userland**: `OpenWrt 19.07` + `LuCI` (`http://192.168.0.1`)  
+**Documentation Portal**: https://ccsimplyspolit.github.io/tenda-ac10-v1-hybrid-openwrt/  
+**Bilingual Wiki**: https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/wiki  
+**Official 4PDA Guide (#3585)**: https://4pda.to/forum/index.php?showtopic=885989&view=findpost&p=145799909  
 
-## Key Features & Verified Fixes
-1. **Wire-Speed Hardware NAT**: Realtek ASIC SRAM Table Lookup Unit (TLU) offload delivers full line-rate ~895–940 Mbps routing with 0.0% CPU overhead (all 9 MIPS32 switch/VLAN/ASIC port-map patches verified for Tenda AC10 V1.0: `WAN = Port 3`, `LAN1..3 = Ports 2..0`).
-2. **Dual-Band Wireless**:
-   - **5 GHz 802.11a/n/ac Wave 2 (up to 866.7 Mbps VHT80)** via PCIe `RTL8822BE` (`mac80211 / hostapd`) with Skyworth `SE5003L1` external PA/LNA (`RFE Type 6` ELF relocation patch + dynamic `HW_WLAN0_11N_XCAP` & `HW_WLAN0_WLAN_ADDR` injection from `/dev/mtd1`).
-   - **2.4 GHz 802.11b/g/n (up to 300 Mbps)** via integrated `RTL8197FS` (`rtl8192cd`) with Skyworth `SKY85303-11` (`RFE Type 5`) + dynamic `/dev/mtd1` RF calibration + `manual_edca=1` & `disable_txsc=1` uTP/BitTorrent stability fixes.
-3. **1-Click Autonomous ISP & Wi-Fi Settings Migration (`Configure_OpenWrt_ISP_WAN_and_WiFi.bat`)**:
-   - Automatically extracts and provisions your ISP cloned `WAN MAC`, protocol (DHCP or Static IPv4 with IP/netmask/gateway), `WAN MTU`, custom upstream `DNS`, `LAN DHCP` pool & `Static DHCP` reservations, and 2.4G/5G Wi-Fi SSIDs, channels & `WPA2-PSK` passphrases from your stock `RouterCfm.cfg` backup over local SSH with zero internet required.
-4. **Boot Stalling Elimination & Floating GPIO Protection**: `/lib/preinit/00_preinit.conf` enforces `pi_preinit_no_failsafe="y"`, preventing floating GPIO 6 (WPS button) transitions from trapping early boot into failsafe mode.
-5. **First-Boot JFFS2 Overlay Auto-Formatting**: `/lib/preinit/80_mount_root` detects stale stock Tenda bytes on `rootfs_data` and formats a clean ~2.41 MB writable `JFFS2` overlay automatically.
-6. **CVE-2026-11405 & Stock Backdoor Immunity**: Stock vendor cloud telemetry (`ucloud_v2`, `sntp`) and unauthenticated debug endpoints (`/cgi-bin/DownloadFlash`, `/goform/telnet`) are completely eliminated.
+---
 
-## Verification Checksums (SHA-256)
+## Что нового и все исправленные проблемы (RU) | Hardened Fixes Baked Out-of-the-Box (EN)
+
+В сборке **r2 (`v4.14.187-r2-ac10-hybrid`)** непосредственно внутрь образов прошивки (`factory.bin`, `sysupgrade.bin`, `webupgrade.bin`) и автономного мигратора (`Configure_OpenWrt_ISP_WAN_and_WiFi.bat`) вшиты **все 14 инженерных исправлений**, выявленных и проверенных на живом роутере под реальной нагрузкой:
+
+1. **5 ГГц Wi-Fi (`RTL8822BE` + `Skyworth SE5003L1` RFE Type 6) с нулём отвалов**:
+   - Бинарный ELF-патч релокаций `rtw88_8822b.ko` под внешние усилители `RFE Type 6` (устранено затухание `-17 dB` на пустом заводском OTP eFuse `0xFF`).
+   - Автоматическая инъекция заводской подстройки кварца `HW_WLAN0_11N_XCAP` и MAC из `/dev/mtd1` (`/bin/set-mib.sh`), жёсткая привязка по PCIe-пути (`ifname='wlan1'`) и эталонный профиль **`VHT20`, канал `36`, `country='US'` (`23 dBm` / `200 мВт`)** — 0 обрывов и 0 повторных передач.
+2. **Одновременная работа кабеля и Wi-Fi без «чёрной дыры» (`hwnat=0` + Software Flow Offloading)**:
+   - По умолчанию `hwnat=0` + `firewall.flow_offloading='1'` при активном аппаратном режиме коммутатора `dir842.asic.role='router'` и сторожевом механизме `fabric_autoreset=3` (`fabric_gw_rearm=1`): полная скорость **~350–500 Мбит/с** одновременно по проводу и Wi-Fi «из коробки» (при необходимости чисто кабельного 1 Гбит/с — включение `hwnat=1` одной командой даёт **~940 Мбит/с** при 0.5% CPU).
+3. **Синхронизация клонированного WAN MAC при холодном старте (`wait_netif_mac`)**:
+   - Исключена гонка при загрузке на провайдерах с привязкой по MAC: `/etc/init.d/dir842-asic` теперь ожидает применения как `eth0.2` (LAN MAC), так и клонированного `eth0.1` (`network.wan.macaddr`) перед программированием таблиц `gw_prog`, а `S99asic-wifi-settle` перепрограммирует L2 после подъёма радиомодулей.
+4. **Полная совместимость с Apple iOS / macOS (RFC 9462 DDR Encrypted DNS & IPv6 Clean-Up)**:
+   - Удалён немаршрутизируемый `ula_prefix`, отключены `ra`/`dhcpv6`, выставлен `dhcp_option '6,1.1.1.1,8.8.8.8,192.168.0.1'` — устройства Apple мгновенно переходят на защищённый HTTP/3 QUIC DoH (`1.1.1.1:443`) без предупреждений «Эта сеть блокирует защищенный трафик DNS».
+5. **Сокетная изоляция от внешней подсети провайдера (`/24` Shared VLAN)**:
+   - `dnsmasq` изолирован правилом `notinterface='eth0.1'`, а `uhttpd` привязан строго к `192.168.0.1:80` и `127.0.0.1:80` (`redirect_https='0'`), кольцевой буфер логов увеличен до `256 КБ`.
+6. **Безопасная прошивка в 1 клик из заводского меню Tenda (`webupgrade.bin`) и по TFTP (`factory.bin`)**:
+   - Односегментный `cs6c` (`0x00030000`) защищает от бага затирания загрузчика (`0x80001C2C`, `$s7=0`), `80_mount_root` автоматически форматирует чистый `JFFS2` поверх стокового мусора в `mtd5`, а `pi_preinit_no_failsafe="y"` защищает от ложного Failsafe на висящем `GPIO 6`.
+
+Полный технический разбор всех проблем и решений:
+- **RU**: [`docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_RU.md`](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/blob/main/docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_RU.md)
+- **EN**: [`docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_EN.md`](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/blob/main/docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_EN.md)
+
+---
+
+## Verification Checksums / Контрольные суммы (SHA-256)
 ```text
-60033fdfaa13af560c7e3e9b34270a1f9f5eb2ea91c938896b1979cab376b4c2  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin
-60033fdfaa13af560c7e3e9b34270a1f9f5eb2ea91c938896b1979cab376b4c2  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin
-a6680ca93880cf951fc25813dcd5925077c0cfde1672edb64cb3cd2ff6c4b1cd  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin
+5954e788b577597c5fe1bd23e18158fb5e368226bf3bc69fca7e0b18cd77ad76  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin
+5954e788b577597c5fe1bd23e18158fb5e368226bf3bc69fca7e0b18cd77ad76  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin
+87da99ea1df7312b41e26e3f9fa449a7863427e7b84a50790a0727694583e056  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin
 f5c7d1755689dd5319420289d8ebd4e661d418f56d99b775f6111c48a3c96345  tenda-ac10-v1.dtb
 a7d4d27f7b1d52526e24348a6a21c5a56740d41b357b17c9e3bc4d8db9f9b0fa  Tenda_AC10_V1_Stock_TFTP_Recovery.bin
-304a5d52085d6e89ce44416d8e7e8874dabc1781fcbc34d428b94b7032f613ef  Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip
+edeb3fb6d6834da5baf8aa9e05379f8e9c47f980b090e3d6e4d6bef251527e81  Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip
 ```
-
-## Quick Installation & Autonomous Migration (Zero Internet Required)
-1. **Step 1 — Flash Hybrid OpenWrt 4.14.187**:
-   - **Via TFTP (Recommended)**: Plug Ethernet into `LAN1`, `LAN2`, or `LAN3` (NOT `WAN`) and run `offline_autonomous_tools/Flash_Hybrid_OpenWrt_4.14_TFTP.bat` while holding `RST` for 8–15s on power-up.
-   - **Via Stock Web UI**: Upload `tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin` at `http://192.168.0.1` (*System Settings -> Firmware Upgrade*).
-2. **Step 2 — 1-Click ISP WAN, DNS, DHCP & Wi-Fi Migration**:
-   - Once OpenWrt boots at `http://192.168.0.1` (~90s), run `offline_autonomous_tools/Configure_OpenWrt_ISP_WAN_and_WiFi.bat`.
-3. **Emergency Solderless Rollback to Stock+**:
-   - Run `offline_autonomous_tools/Offline_TFTP_Recovery_and_Flash.bat` followed by `offline_autonomous_tools/Restore_Optimized_Config_and_WAN.bat`.

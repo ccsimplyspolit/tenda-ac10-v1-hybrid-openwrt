@@ -1,0 +1,93 @@
+name: Deploy Documentation Portal to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Python Markdown Renderer
+        run: python3 -m pip install --quiet markdown
+
+      - name: Generate Bilingual Static Documentation Site
+        run: |
+          python3 - << 'PYEOF'
+          import html, markdown, pathlib, shutil
+
+          site = pathlib.Path("_site")
+          if site.exists():
+              shutil.rmtree(site)
+          site.mkdir(parents=True)
+          (site / ".nojekyll").write_text("", encoding="utf-8")
+
+          css = """
+          :root { --bg:#0d1117; --card:#161b22; --fg:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --border:#30363d; }
+          body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; background:var(--bg); color:var(--fg); margin:0; line-height:1.6; }
+          header { background:var(--card); border-bottom:1px solid var(--border); padding:16px 24px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between; }
+          header a { color:var(--accent); text-decoration:none; font-weight:600; margin-right:14px; }
+          main { max-width:1040px; margin:28px auto; padding:28px; background:var(--card); border:1px solid var(--border); border-radius:10px; }
+          a { color:var(--accent); }
+          pre, code { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; background:#0b0f14; border-radius:6px; }
+          pre { padding:14px; overflow-x:auto; border:1px solid var(--border); }
+          code { padding:2px 5px; }
+          table { border-collapse:collapse; width:100%; margin:16px 0; display:block; overflow-x:auto; }
+          th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; }
+          th { background:#21262d; }
+          blockquote { border-left:4px solid var(--accent); margin:16px 0; padding:4px 16px; color:var(--muted); }
+          """
+
+          nav = (
+              '<header><div>'
+              '<a href="index.html">Overview (RU/EN)</a>'
+              '<a href="ru-full.html">README RU</a>'
+              '<a href="postmortem-ru.html">Post-Mortem (RU)</a>'
+              '<a href="postmortem-en.html">Post-Mortem (EN)</a>'
+              '<a href="https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases">Releases</a>'
+              '<a href="https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/wiki">Wiki</a>'
+              '</div></header>'
+          )
+
+          pages = [
+              ("index.html", "Tenda AC10 V1.0 — Hybrid OpenWrt 4.14.187", pathlib.Path("README.md")),
+              ("ru-full.html", "Tenda AC10 V1.0 — Полное руководство (RU)", pathlib.Path("README_RU.md")),
+              ("postmortem-ru.html", "Инженерный пост-мортем: все проблемы и решения (RU)", pathlib.Path("docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_RU.md")),
+              ("postmortem-en.html", "Engineering Post-Mortem: All Problems & Solutions (EN)", pathlib.Path("docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_EN.md")),
+          ]
+
+          for out_name, title, src in pages:
+              if not src.exists():
+                  continue
+              body_html = markdown.markdown(src.read_text(encoding="utf-8"), extensions=["tables", "fenced_code", "toc"])
+              doc = f"<!doctype html><html lang='ru'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{html.escape(title)}</title><style>{css}</style></head><body>{nav}<main>{body_html}</main></body></html>"
+              (site / out_name).write_text(doc, encoding="utf-8")
+          PYEOF
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "_site"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

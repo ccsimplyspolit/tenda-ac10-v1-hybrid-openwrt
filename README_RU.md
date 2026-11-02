@@ -22,6 +22,8 @@
 | **Реверс-инжиниринг** | Разбор загрузчика Booter, ядра cr6c, драйверов rtl8192cd и HWNAT | [docs/reverse_engineering/](docs/reverse_engineering/) |
 | **Оптимизация Stock+** | Очищенный конфиг, отключение ucloud_v2, освобождение 6.8 МБ RAM | [docs/stock_plus/](docs/stock_plus/) |
 | **Hybrid OpenWrt 4.14** | Исходники DTS, ядро 4.14, интеграция драйверов и сборка | [docs/openwrt_hybrid/](docs/openwrt_hybrid/) |
+| **Инженерный пост-мортем (14 проблем)** | Полный разбор всех багов железа, загрузчика, Wi-Fi, NAT, iOS DoH и их решений | [ENGINEERING_POSTMORTEM_RU.md](docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_RU.md) |
+| **Официальный пост на 4PDA** | Подробный гайд прошивки и FAQ в теме Tenda AC10 (#3585) | [4PDA #3585](https://4pda.to/forum/index.php?showtopic=885989&view=findpost&p=145799909) |
 | **Аварийное восстановление** | 100% автономный офлайн-пакет восстановления по TFTP | [docs/recovery/](docs/recovery/) |
 | **Автономные скрипты** | Python-утилиты аварийного восстановления и проверки дампов | [tools/autonomous_recovery/](tools/autonomous_recovery/) |
 
