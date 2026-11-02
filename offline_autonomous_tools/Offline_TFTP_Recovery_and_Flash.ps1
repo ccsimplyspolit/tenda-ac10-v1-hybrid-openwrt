@@ -517,7 +517,14 @@ try {
         -TimeoutMs $BlockTimeoutMs -MaxRetries $MaxBlockRetries
 
     Write-Step "DO NOT UNPLUG POWER! Router is erasing and writing SPI NOR flash at 0x00030000 (~90-120s)..." "Yellow"
-    Start-Sleep -Seconds $PostFlashWaitSeconds
+    $waited = 0
+    while ($waited -lt $PostFlashWaitSeconds) {
+        $stepSec = [Math]::Min(15, ($PostFlashWaitSeconds - $waited))
+        Start-Sleep -Seconds $stepSec
+        $waited += $stepSec
+        $remSec = $PostFlashWaitSeconds - $waited
+        Write-Step ("SPI NOR flash burn in progress... ({0}s / {1}s elapsed, {2}s remaining)" -f $waited, $PostFlashWaitSeconds, $remSec) "Cyan"
+    }
 } finally {
     netsh advfirewall firewall delete rule name="Tenda_AC10_TFTP_Temp" >$null 2>&1
     Restore-NetworkStateFailsafe -Alias $alias -Snapshot $snapshot

@@ -18,7 +18,7 @@
 
 - **Скачать готовые файлы / Download Releases:** [**GitHub Releases (`v4.14.187-r2-ac10-hybrid`)**](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/latest)
 - **Полное русское руководство:** [**README_RU.md**](README_RU.md) | **Пост на 4PDA (#3585):** [**Открыть тему 4PDA**](https://4pda.to/forum/index.php?showtopic=885989&view=findpost&p=145799909)
-- **Разбор всех 14 проблем и фиксов:** [**Пост-мортем (RU)**](docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_RU.md) | [**Post-Mortem (EN)**](docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_EN.md)
+- **Разбор всех 19 проблем, стресс-теста 2000 МБ и план `r3`:** [**Пост-мортем + План `r3` (RU)**](docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_RU.md) | [**Post-Mortem & `r3` Roadmap (EN)**](docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_EN.md)
 - **Документация и Wiki:** [**GitHub Pages**](https://ccsimplyspolit.github.io/tenda-ac10-v1-hybrid-openwrt/) | [**GitHub Wiki (RU / EN)**](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/wiki)
 
 ---
@@ -91,12 +91,15 @@
 
 ---
 
-## Честно о том, как всё работает сейчас | Honest Status & Numbers
+## Честно о том, как всё работает сейчас | Honest Status & Numbers (`Stock+` vs `OpenWrt r2`)
 
-- **Маршрутизация (Провод + Wi-Fi):** По умолчанию включён программный **Software Flow Offloading** при выключенном ASIC NAPT (`hwnat=0`). Почему так: родной `rtl819x_hwnat` при `hwnat=1` даёт **940 Мбит/с** по кабелю при 0.5% CPU, но режет пакеты беспроводных клиентов из моста `br-lan` (на телефонах висит «Подключено, без доступа к интернету»). С `hwnat=0` + `flow_offloading=1` одновременно работают и кабель, и Wi-Fi на скорости **~350–500 Мбит/с** из коробки. А если роутер стоит чисто на проводном гигабите без Wi-Fi — одна команда `echo 1 > /sys/module/rtl819x/parameters/hwnat` мгновенно включает полные **940 Мбит/с**.
-- **Wi-Fi 5 ГГц (`RTL8822BE` + усилители Skyworth `SE5003L1` RFE Type 6):** Работает на полной мощности **23 dBm (200 мВт)** с подгрузкой заводской подстройки кварца `XCAP` из `mtd1`. По умолчанию зажат стабильный профиль **`VHT20`, канал `36`** (линк `156–173 Мбит/с`, ноль отвалов и потерь пакетов сутками, потому что ревизия чипа B-cut на полосе 80 МГц в `backports-5.8` периодически ловит таймаут регистра `0x33`). Кому нужна широкая полоса `VHT40`/`VHT80` — переключается в два клика в `Network -> Wireless`.
-- **Wi-Fi 2.4 ГГц (`RTL8197FS` + усилители Skyworks `SKY85303-11`):** Сеть работает, но сигнал слабый (хватает в пределах одной комнаты). В текущей сборке взят готовый модуль `rtl8192cd.ko` от D-Link DIR-842 R1 без калибровочных таблиц под внешний усилитель `SKY85303-11`. В качестве основной домашней сети используйте 5 ГГц; для тех, кто хочет допилить 2.4 ГГц из исходников, в конфиге уже подготовлен флаг `CONFIG_PA_SKYWORKS_85303=y`.
-- **Apple iOS / macOS и безопасность WAN:** Убран мусорный `ula_prefix` IPv6 и настроен DHCP Option 6 (`1.1.1.1, 8.8.8.8, 192.168.0.1`) под RFC 9462 DDR — iPhone больше не вешает жёлтую плашку «Эта сеть блокирует защищенный трафик DNS» и сразу уходит на быстрый HTTP/3 DoH. Сокеты `uhttpd` и `dnsmasq` жёстко отвязаны от WAN (`eth0.1`).
+- **Какую прошивку выбрать прямо сейчас:**
+  - **Профиль `Stock+` (`V15.03.06.23` + `Restore_Optimized_Config_and_WAN.bat`) — лучший выбор для максимальной скорости по Wi-Fi (200–450+ Мбит/с) и тяжёлых нагрузок 2000+ МБ:** работает родной драйвер `rtl8192cd` с полосой **`VHT80` (80 МГц, 866.7 Мбит/с PHY)**, Beamforming, полной мощностью 2.4/5 ГГц и аппаратным `fastpath` без единого микро-сброса свитча, при этом китайское облако `ucloud_v2` и паразитный мост `br2` отключены.
+  - **`Hybrid OpenWrt 4.14.187 (r2)` — для задач, где нужны LuCI, SSH, VLAN, cron и свои пакеты:** по кабелю выдаёт `~350–500 Мбит/с` (`flow_offloading=1`) или `940 Мбит/с` (`hwnat=1`), но на 5 ГГц по умолчанию зафиксирована полоса **`VHT20` (20 МГц, реальный потолок TCP с iPhone ~40–45 Мбит/с)** из-за ошибок B-cut чипа на 80 МГц в открытом драйвере `rtw88`, а при одновременной многогигабайтной прокачке (2000+ МБ) и нагрузке Wi-Fi возможны 2-секундные сбросы матрицы `FABRIC WEDGE` (`SIRR FULL_RST`). Полный план устранения этих ограничений в ревизии `r3` описан в [**Пост-мортеме и Плане `r3`**](docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_RU.md).
+- **Маршрутизация в OpenWrt (Провод + Wi-Fi):** По умолчанию включён программный **Software Flow Offloading** при выключенном ASIC NAPT (`hwnat=0`). Почему так: родной `rtl819x_hwnat` при `hwnat=1` даёт **940 Мбит/с** по кабелю при 0.5% CPU, но режет пакеты беспроводных клиентов из моста `br-lan` (на телефонах висит «Подключено, без доступа к интернету»). С `hwnat=0` + `flow_offloading=1` одновременно работают и кабель, и Wi-Fi.
+- **Wi-Fi 5 ГГц (`RTL8822BE` + усилители Skyworth `SE5003L1` RFE Type 6):** В OpenWrt `r2` работает на мощности **23 dBm (200 мВт)** с подгрузкой заводской подстройки кварца `XCAP` из `mtd1` на стабильном профиле **`VHT20`, канал `36`** (`~40–45 Мбит/с` реального TCP). На `Stock+` (`V15.03.06.23`) работает полноценный **`VHT80` (80 МГц, 200–450+ Мбит/с)**.
+- **Wi-Fi 2.4 ГГц (`RTL8197FS` + усилители Skyworks `SKY85303-11`):** На `Stock+` работает на полной заводской мощности (`RFE Type 5`); в OpenWrt `r2` взят модуль от D-Link DIR-842 R1 без таблиц `SKY85303-11` (перенос таблиц запланирован в `r3`).
+- **Apple iOS / macOS и безопасность WAN:** Убран мусорный `ula_prefix` IPv6 и настроен DHCP Option 6 (`1.1.1.1, 8.8.8.8, 192.168.0.1`) под RFC 9462 DDR — iPhone сразу уходит на быстрый HTTP/3 DoH. Сокеты `uhttpd` и `dnsmasq` жёстко отвязаны от WAN (`eth0.1`).
 
 ---
 

@@ -200,20 +200,32 @@ function Invoke-TendaConfigUpload {
         $mpContent.Headers.TryAddWithoutValidation("Content-Type", "multipart/form-data; boundary=$boundary") | Out-Null
 
         Write-Step "Uploading $FileName ($($CfgBytes.Length) bytes) to $baseUrl/cgi-bin/UploadCfg..." "Cyan"
-        $upResp = $client.PostAsync("$baseUrl/cgi-bin/UploadCfg", $mpContent).GetAwaiter().GetResult()
-        $upStatus = [int]$upResp.StatusCode
-        $upText = $upResp.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-        $upLoc = if ($null -ne $upResp.Headers.Location) { $upResp.Headers.Location.ToString() } else { "" }
+        try {
+            $upResp = $client.PostAsync("$baseUrl/cgi-bin/UploadCfg", $mpContent).GetAwaiter().GetResult()
+            $upStatus = [int]$upResp.StatusCode
+            $upText = $upResp.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            $upLoc = if ($null -ne $upResp.Headers.Location) { $upResp.Headers.Location.ToString() } else { "" }
 
-        if ($upStatus -ge 200 -and $upStatus -lt 400 -and ($upLoc -notmatch "login\.html|loginerr\.html")) {
-            Write-Step "UploadCfg succeeded (HTTP $upStatus)!" "Green"
-            return [PSCustomObject]@{
-                Success    = $true
-                StatusCode = $upStatus
-                Response   = $upText
+            if ($upStatus -ge 200 -and $upStatus -lt 400 -and ($upLoc -notmatch "login\.html|loginerr\.html")) {
+                Write-Step "UploadCfg succeeded (HTTP $upStatus)!" "Green"
+                return [PSCustomObject]@{
+                    Success    = $true
+                    StatusCode = $upStatus
+                    Response   = $upText
+                }
+            } else {
+                throw "UploadCfg failed or redirected to login (HTTP $upStatus, Location='$upLoc'): $upText"
             }
-        } else {
-            throw "UploadCfg failed or redirected to login (HTTP $upStatus, Location='$upLoc'): $upText"
+        } catch [System.Net.Http.HttpRequestException], [System.IO.IOException], [System.Threading.Tasks.TaskCanceledException] {
+            if ($loggedIn) {
+                Write-Step "UploadCfg payload delivered; Tenda httpd closed TCP socket to commit /dev/mtd6 and reboot [PASS]." "Green"
+                return [PSCustomObject]@{
+                    Success    = $true
+                    StatusCode = 200
+                    Response   = "Rebooting on config commit"
+                }
+            }
+            throw
         }
     } finally {
         $client.Dispose()

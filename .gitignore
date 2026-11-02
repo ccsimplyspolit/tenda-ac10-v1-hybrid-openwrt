@@ -29,6 +29,8 @@ venv/
 # Network & Router Local State Backups
 network_state_backup.json
 *backup*.cfg
+backups/
+RouterCfm_optimized_v1.cfg
 
 # Raw SPI Flash Dumps & Sensitive Recovery Files
 *FullFlash*
