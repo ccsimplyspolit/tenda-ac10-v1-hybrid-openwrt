@@ -5,33 +5,33 @@ list listen_http '192.168.0.1:80'
 [snapback]145809665[/snapback]
 [/quote]
 
-[b]Ronin浪人[/b], отличная находка, спасибо за внимательность!
+[b]Ronin浪人[/b], точно, мой косяк — спасибо что заметил!
 
-Проверил — всё именно так. В стартовом скрипте инициализации веб-сервер LuCI жёстко привязывался к заводскому адресу [font="Courier New"][b]192.168.0.1:80[/b][/font]. Пока роутер работает в стандартной домашней подсети, всё отлично, но стоит сменить адрес LAN или перевести устройство в режим прозрачной точки доступа / моста (с получением IP по DHCP от главного роутера), как старый адрес исчезает с интерфейса, и LuCI перестаёт откликаться на новом IP.
+Когда делал стартовый скрипт [font="Courier New"]99-dir842-m5[/font], жёстко привязал [font="Courier New"]uhttpd[/font] к [font="Courier New"]192.168.0.1:80[/font], чтобы веб-морда гарантированно не светила в сторону провайдера, а про сценарий с прозрачной точкой доступа (Dumb AP / мост по DHCP) и сменой домашней подсети не подумал. В итоге как только [font="Courier New"]192.168.0.1[/font] уходит с интерфейса, LuCI перестаёт откликаться на новом адресе.
 
-[color="#008000"][b]Исправление уже внесено и перезалито в релиз:[/b][/color]
-• Веб-сервер переведён на прослушивание всех локальных адресов ([font="Courier New"][b]0.0.0.0:80[/b][/font] и [font="Courier New"][b][::]:80[/b][/font]) со включённым фильтром [font="Courier New"][b]rfc1918_filter='1'[/b][/font]. Панель управления теперь сразу открывается на любом назначенном IP-адресе и в любой подсети — как в режиме роутера, так и в режиме точки доступа или моста.
-• Доступ к веб-панели со стороны провайдера (порт WAN) по-прежнему полностью заблокирован правилами межсетевого экрана и аппаратной изоляцией портов коммутатора.
-• Все три образа прошивки ([font="Courier New"]webupgrade[/font], [font="Courier New"]factory[/font], [font="Courier New"]sysupgrade[/font]) и оба архива инструментов пересобраны и обновлены по ссылкам из основного поста [url=https://4pda.to/forum/index.php?act=findpost&pid=145799909][b]#3585[/b][/url] и в прикреплённых ниже файлах.
+[color="#008000"][b]Уже поправил и перезалил образы на GitHub:[/b][/color]
+• Вернул в дефолт прослушивание на всех интерфейсах ([font="Courier New"][b]0.0.0.0:80[/b][/font] и [font="Courier New"][b][::]:80[/b][/font]) + включил [font="Courier New"][b]rfc1918_filter='1'[/b][/font]. Теперь веб-интерфейс открывается на любом IP — хоть роутером в другой подсети, хоть прозрачной точкой доступа.
+• Снаружи со стороны WAN ([font="Courier New"]eth0.1[/font]) 80-й порт намертво закрыт файрволом, в инет ничего не торчит.
+• Все три образа ([font="Courier New"]webupgrade[/font], [font="Courier New"]factory[/font], [font="Courier New"]sysupgrade[/font]) и архивы пересобраны — ссылки в основном посте [url=https://4pda.to/forum/index.php?act=findpost&pid=145799909][b]#3585[/b][/url] уже ведут на обновлённые файлы, плюс прикрепил свежие архивы ниже.
 
-[b]Как поправить за 10 секунд на уже прошитом роутере (без перепрошивки):[/b]
-Если прошивка уже установлена, перепрошивать роутер не обязательно — достаточно зайти по SSH и выполнить:
+[b]Чтобы не перешиваться заново — фикс за 10 секунд по SSH:[/b]
+Если прошивка уже стоит на роутере, достаточно зайти по SSH и скопировать целиком:
 [code]uci -q delete uhttpd.main.listen_http
 uci add_list uhttpd.main.listen_http='0.0.0.0:80'
 uci add_list uhttpd.main.listen_http='[::]:80'
 uci set uhttpd.main.rfc1918_filter='1'
 uci commit uhttpd
 /etc/init.d/uhttpd restart[/code]
-Сразу после этого LuCI начнёт открываться по любому текущему IP роутера.
+Сразу после этого LuCI откроется по новому адресу роутера.
 
-[spoiler="Прямые ссылки на обновлённые образы и контрольные суммы SHA-256"]
-[b]Прямые ссылки на скачивание (GitHub Release v4.14.187-r3-ac10-hybrid):[/b]
-• [url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/download/v4.14.187-r3-ac10-hybrid/tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin][b]tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin[/b][/url] — для перехода со стоковой прошивки Tenda через веб-меню
-• [url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/download/v4.14.187-r3-ac10-hybrid/tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin][b]tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin[/b][/url] — для установки в 1 клик по TFTP или программатором
-• [url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/download/v4.14.187-r3-ac10-hybrid/tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin][b]tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin[/b][/url] — для обновления напрямую из меню LuCI (System -> Flash Firmware)
-• [url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/download/v4.14.187-r3-ac10-hybrid/SHA256SUMS.txt][b]SHA256SUMS.txt[/b][/url] — полный список контрольных сумм
+[spoiler="Прямые ссылки на обновлённые образы и суммы SHA-256"]
+[b]Скачать обновлённые образы (GitHub Release v4.14.187-r3-ac10-hybrid):[/b]
+• [url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/download/v4.14.187-r3-ac10-hybrid/tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin][b]tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin[/b][/url] — для прошивки прямо из родного веб-меню Tenda
+• [url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/download/v4.14.187-r3-ac10-hybrid/tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin][b]tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin[/b][/url] — для прошивки по TFTP или программатором
+• [url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/download/v4.14.187-r3-ac10-hybrid/tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin][b]tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin[/b][/url] — для обновления из LuCI (System -> Flash Firmware)
+• [url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/download/v4.14.187-r3-ac10-hybrid/SHA256SUMS.txt][b]SHA256SUMS.txt[/b][/url] — текстовый файл с контрольными суммами
 
-[b]Контрольные суммы SHA-256 обновлённых образов:[/b]
+[b]SHA-256 пересобранных образов:[/b]
 [code]7bd99d144fb90fade7f7ecace0d2ebc2de7e34afb627231cc9305bd3ccceabc7 *tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin (5 542 534 байт)
 7bd99d144fb90fade7f7ecace0d2ebc2de7e34afb627231cc9305bd3ccceabc7 *tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin (5 542 534 байт)
 8f77ff1b8eaf4b0cbc06db8c377ed3a22235ae1db45f65f0fef592f627e5af22 *tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin (5 542 598 байт)[/code]
