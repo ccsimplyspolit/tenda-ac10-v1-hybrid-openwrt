@@ -577,7 +577,7 @@ os.chmod(p_l2flush_bin, 0o755)
 #    Tenda SSID/MAC (neutral fallback 50:0f:f5:00:00:05), bind radio0 by PCIe path (immune to phy0->phy1),
 #    VHT80 default on channel 36 + country=US (23 dBm, 866.7 Mbps PHY with extended RF 0x33 poll timeout),
 #    software flow_offloading=1, clean IPv4 + RFC 9462 DDR DNS defaults for iOS/macOS compatibility,
-#    WAN shared-VLAN socket isolation (dnsmasq notinterface=eth0.1, uhttpd LAN-only 192.168.0.1/127.0.0.1),
+#    WAN shared-VLAN socket isolation (dnsmasq notinterface=eth0.1, uhttpd 0.0.0.0:80 / [::]:80 with WAN drop and rfc1918_filter),
 #    and 256 KB ring buffer log_size.
 p_m5 = os.path.join(root, "etc/uci-defaults/99-dir842-m5")
 s = open(p_m5, "r", encoding="utf-8").read()
@@ -616,7 +616,18 @@ uci -q delete network.globals.ula_prefix
 uci -q commit network
 uci -q set firewall.@defaults[0].flow_offloading='1'
 uci -q set firewall.@defaults[0].flow_offloading_hw='1'
+uci -q set firewall.block_wan_http='rule'
+uci -q set firewall.block_wan_http.name='Block-WAN-HTTP'
+uci -q set firewall.block_wan_http.src='wan'
+uci -q set firewall.block_wan_http.proto='tcp'
+uci -q set firewall.block_wan_http.dest_port='80'
+uci -q set firewall.block_wan_http.target='DROP'
 uci -q commit firewall
+cat << 'EOF' >> /etc/firewall.user
+# Drop incoming HTTP port 80 on physical WAN interface eth0.1
+iptables -I INPUT -i eth0.1 -p tcp --dport 80 -j DROP 2>/dev/null || true
+ip6tables -I INPUT -i eth0.1 -p tcp --dport 80 -j DROP 2>/dev/null || true
+EOF
 uci -q set dhcp.@dnsmasq[0].rebind_protection='0'
 uci -q set dhcp.@dnsmasq[0].cachesize='1000'
 uci -q del_list dhcp.@dnsmasq[0].notinterface='eth0.1' 2>/dev/null || true
@@ -629,8 +640,9 @@ uci -q delete dhcp.lan.dhcp_option
 uci -q add_list dhcp.lan.dhcp_option='6,1.1.1.1,8.8.8.8,192.168.0.1'
 uci -q commit dhcp
 uci -q delete uhttpd.main.listen_http 2>/dev/null || true
-uci -q add_list uhttpd.main.listen_http='192.168.0.1:80'
-uci -q add_list uhttpd.main.listen_http='127.0.0.1:80'
+uci -q add_list uhttpd.main.listen_http='0.0.0.0:80'
+uci -q add_list uhttpd.main.listen_http='[::]:80'
+uci -q set uhttpd.main.rfc1918_filter='1'
 uci -q delete uhttpd.main.listen_https 2>/dev/null || true
 uci -q set uhttpd.main.redirect_https='0'
 uci -q commit uhttpd

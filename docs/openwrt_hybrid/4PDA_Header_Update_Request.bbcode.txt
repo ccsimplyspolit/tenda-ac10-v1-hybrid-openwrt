@@ -31,7 +31,7 @@
 (Можно скопировать и вставить напрямую в спойлер «Прошивки» / «Неофициальные прошивки»):
 
 [spoiler=Hybrid OpenWrt 4.14.187 (v4.14.187-r3-ac10-hybrid) для Tenda AC10 V1.0 (8MB Flash / 64MB RAM)]
-[b]Релиз:[/b] [url=https://4pda.to/forum/index.php?showtopic=885989&view=findpost&p=136460081][b]Подробное описание и файлы в посте #3585[/b][/url] | [url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/latest]GitHub Releases[/url] | [url=https://ccsimplyspolit.github.io/tenda-ac10-v1-hybrid-openwrt/]Интерактивный сайт документации[/url]
+[b]Релиз:[/b] [url=https://4pda.to/forum/index.php?showtopic=885989&view=findpost&p=145799909][b]Подробное описание и файлы в посте #3585[/b][/url] | [url=https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/latest]GitHub Releases[/url] | [url=https://ccsimplyspolit.github.io/tenda-ac10-v1-hybrid-openwrt/]Интерактивный сайт документации[/url]
 [b]Версия ядра:[/b] Linux 4.14.187 + OpenWrt 19.07 (34 MIPS32 патча ядра Realtek)
 [b]Веб-интерфейс LuCI:[/b] http://192.168.0.1 (логин root, без пароля)
 

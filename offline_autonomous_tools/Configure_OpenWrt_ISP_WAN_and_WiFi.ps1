@@ -419,8 +419,9 @@ $dhcpStaticBlock
 uci commit dhcp
 
 uci -q delete uhttpd.main.listen_http 2>/dev/null || true
-uci add_list uhttpd.main.listen_http='192.168.0.1:80'
-uci add_list uhttpd.main.listen_http='127.0.0.1:80'
+uci add_list uhttpd.main.listen_http='0.0.0.0:80'
+uci add_list uhttpd.main.listen_http='[::]:80'
+uci -q set uhttpd.main.rfc1918_filter='1' || true
 uci -q delete uhttpd.main.listen_https 2>/dev/null || true
 uci -q set uhttpd.main.redirect_https='0' || true
 uci commit uhttpd

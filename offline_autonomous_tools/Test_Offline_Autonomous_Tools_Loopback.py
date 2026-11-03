@@ -596,7 +596,7 @@ def main() -> int:
             and "uci commit dhcp" in dry_out
             and "/etc/init.d/network reload" in dry_out
             and ("/etc/init.d/dnsmasq restart" in dry_out or "/etc/init.d/dnsmasq reload" in dry_out)
-            and "uhttpd.main.listen_http='192.168.0.1:80'" in dry_out
+            and "uhttpd.main.listen_http='0.0.0.0:80'" in dry_out
             and "uci commit wireless" in dry_out
             and "wifi reload" in dry_out,
             "Configure_OpenWrt_ISP_WAN_and_WiFi.ps1 zero-argument -DryRun mode & generated UCI command verification (WAN/DNS/DHCP/Wi-Fi)",
