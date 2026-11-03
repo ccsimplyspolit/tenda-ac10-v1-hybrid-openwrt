@@ -18,9 +18,9 @@ chmod +x build_hybrid_openwrt_ac10.sh
 ```
 
 Через 1–2 минуты в папке `02_Compiled_Hybrid_OpenWrt_4.14_Firmware/` появятся четыре проверенных файла:
-- `tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin` (`5,681,798` байт, монолитный `cs6c` с записью по `0x00030000` для TFTP);
-- `tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin` (`5,681,798` байт, для обновления через LuCI / `sysupgrade`);
-- `tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin` (`5,681,862` байт, обёрнутый в 64-байтный заголовок `trx2` с кодом модели `0x00030028` для прошивки прямо из родного меню Tenda без ошибки `"Format error!"`);
+- `tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin` (`5,542,534` байта / ~5.54 MB, монолитный `cs6c` с записью по `0x00030000` для TFTP);
+- `tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin` (`5,542,534` байта / ~5.54 MB, для обновления через LuCI / `sysupgrade`);
+- `tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin` (`5,542,598` байт / ~5.54 MB, обёрнутый в 64-байтный заголовок `trx2` с кодом модели `0x00030028` для прошивки прямо из родного меню Tenda без ошибки `"Format error!"`);
 - `tenda-ac10-v1.dtb` (`4,182` байта, скомпилированное дерево устройств).
 
 ---

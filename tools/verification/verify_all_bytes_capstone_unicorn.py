@@ -2,8 +2,8 @@
 """
 Byte-by-Byte Disassembly (Capstone MIPS32 LE) & CPU Emulation (Unicorn MIPS32 LE)
 Verification of the Final Shipped Hybrid OpenWrt 4.14.187 r3 Firmware Images:
-  - 02_Compiled_Hybrid_OpenWrt_4.14_Firmware/tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin (5,681,798 B)
-  - 02_Compiled_Hybrid_OpenWrt_4.14_Firmware/tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin (5,681,862 B)
+  - 02_Compiled_Hybrid_OpenWrt_4.14_Firmware/tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin (5,542,534 B)
+  - 02_Compiled_Hybrid_OpenWrt_4.14_Firmware/tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin (5,542,598 B)
 """
 import hashlib
 import lzma
@@ -19,7 +19,10 @@ from unicorn.mips_const import (
     UC_MIPS_REG_V0,
 )
 
-REPO_DIR = Path(__file__).resolve().parent.parent.parent
+if (Path(__file__).resolve().parent.parent / "02_Compiled_Hybrid_OpenWrt_4.14_Firmware").exists():
+    REPO_DIR = Path(__file__).resolve().parent.parent
+else:
+    REPO_DIR = Path(__file__).resolve().parent.parent.parent
 FW_DIR = REPO_DIR / "02_Compiled_Hybrid_OpenWrt_4.14_Firmware"
 
 VMLINUX_R3_PATCHES = [
@@ -62,11 +65,13 @@ VMLINUX_R3_PATCHES = [
 
 def main():
     md = Cs(CS_ARCH_MIPS, CS_MODE_MIPS32 + CS_MODE_LITTLE_ENDIAN)
+    EXPECTED_FW_SHA256 = "8f77ff1b8eaf4b0cbc06db8c377ed3a22235ae1db45f65f0fef592f627e5af22"
     factory_bytes = (FW_DIR / "tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin").read_bytes()
     web_bytes = (FW_DIR / "tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin").read_bytes()
 
-    assert len(factory_bytes) == 5681798
-    assert len(web_bytes) == 5681862
+    assert hashlib.sha256(web_bytes).hexdigest() == EXPECTED_FW_SHA256
+    assert len(factory_bytes) == 5542534
+    assert len(web_bytes) == 5542598
     assert web_bytes[64:] == factory_bytes
 
     # 1. Extract vmlinux from factory.bin LZMA stream and verify all 34 patches with Capstone + Unicorn
@@ -102,7 +107,7 @@ def main():
     print("  [PASS] Unicorn MIPS32 emulation of trunk_pause={1,2,3} -> PCRP0[17:16]={3,0,1} verified!")
 
     # 2. Extract rtw88_8822b.ko and rtw88_core.ko directly from factory.bin SquashFS @ 0x1B0284
-    sqfs_bytes = factory_bytes[0x1B0284:0x1B0284 + 3911680]
+    sqfs_bytes = factory_bytes[0x1B0284:]
     assert sqfs_bytes[:4] == b"hsqs"
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_sqfs = Path(tmpdir) / "rootfs.squashfs"

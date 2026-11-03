@@ -66,7 +66,7 @@
 ### Способ 1: Прямо из родного меню Tenda через браузер (без TFTP)
 1. Подключите ПК кабелем в жёлтый порт **LAN 1** или **LAN 2** (по Wi-Fi шить не надо).
 2. Откройте `http://192.168.0.1` -> *Системные настройки* -> *Обновление прошивки*.
-3. Выберите файл [**`tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin`**](02_Compiled_Hybrid_OpenWrt_4.14_Firmware/tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin) (`5,681,862` Б, с 64-байтным заголовком `trx2` `0x00030028` — штатная проверка не выдаст `"Format error!"`).
+3. Выберите файл [**`tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin`**](02_Compiled_Hybrid_OpenWrt_4.14_Firmware/tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin) (`5,542,598` Б, с 64-байтным заголовком `trx2` `0x00030028` — штатная проверка не выдаст `"Format error!"`).
 4. Подождите **90–120 секунд**: при первом запуске скрипт `80_mount_root` сам очистит хвосты стокового SquashFS в `mtd5` и разметит чистый раздел `JFFS2` под настройки. После этого панель LuCI откроется на **`http://192.168.0.1`** (логин `root`, пароль пустой).
 
 ### Способ 2: В 1 клик через загрузчик по TFTP (рекомендуется, поднимает из любого состояния)
@@ -82,7 +82,7 @@
 
 ### Option 1: Direct Upgrade from Stock Tenda Web UI
 1. Plug an Ethernet patch cord into yellow **LAN 1 or LAN 2**, open `http://192.168.0.1` -> *System Settings* -> *Firmware Upgrade*.
-2. Upload [**`tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin`**](02_Compiled_Hybrid_OpenWrt_4.14_Firmware/tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin) (`5,681,862` B, carries the `0x00030028` `trx2` header expected by `libcommon.so`).
+2. Upload [**`tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin`**](02_Compiled_Hybrid_OpenWrt_4.14_Firmware/tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin) (`5,542,598` B, carries the `0x00030028` `trx2` header expected by `libcommon.so`).
 3. Give the first boot **90–120 seconds** to format a clean `JFFS2` overlay over `mtd5`, then sign in to LuCI at **`http://192.168.0.1`** (`root`, empty password).
 
 ### Option 2: 1-Click Bootloader TFTP Flash (Also Unbricks Any Soft-Brick)
@@ -101,7 +101,7 @@
 - **Маршрутизация в OpenWrt `r3` (Провод + Wi-Fi на полной скорости):** В ревизии `r3` пропатчен бит `WANRouteMode=ToCpu` (`SWTCR0 |= 0x400C`) в `gw_prog` и добавлен событийный сброс L2-таблицы (`dir842-l2flush`), благодаря чему **аппаратный NAT (`hwnat=1`) и `Software/Hardware Flow Offloading` работают одновременно и для кабеля (до 940 Мбит/с), и для клиентов Wi-Fi** без «чёрной дыры» на смартфонах.
 - **Wi-Fi 5 ГГц (`RTL8822BE` + усилители Skyworth `SE5003L1` RFE Type 6):** В OpenWrt `r3` работает на полной мощности **23 dBm (200 мВт)** с заводской подстройкой кварца `XCAP` из `mtd1` на широкой полосе **`VHT80` (80 МГц), канал `36` (`149` резервный)**: время ожидания калибровки RF-регистра `0x33` для 1x1 и 2x2 увеличено в 10 раз (`100 -> 1000` итераций / `2 мс`), активирован порог `REG_L1WT` (`0x9194b2b9`) для `RFE Type 6 B-cut`, а управляющие и EAPOL-кадры зафиксированы на `DESC_RATE6M` (`6 Мбит/с OFDM` вместо `1 Мбит/с CCK`).
 - **Wi-Fi 2.4 ГГц (`RTL8197FS` + усилители Skyworks `SKY85303-11` RFE Type 5):** В `/bin/set-mib.sh` добавлена побайтовая подгрузка заводских таблиц мощности `pwrlevelCCK_A/B`, `pwrlevelHT40_1S_A/B`, `ther`, `regdomain` и `trswitch` из раздела `calibration` (`mtd1`), включена агрегация `ampdu=1` + `amsdu=1` и отключён дефектный TX-shortcut (`disable_txsc=1`), вызывавший потерю пакетов под нагрузкой.
-- **Apple iOS / macOS и безопасность WAN:** Убран мусорный `ula_prefix` IPv6 и настроен DHCP Option 6 (`1.1.1.1, 8.8.8.8, 192.168.0.1`) под RFC 9462 DDR — iPhone сразу уходит на быстрый HTTP/3 DoH. Сокеты `uhttpd` и `dnsmasq` жёстко отвязаны от WAN (`eth0.1`), а WPS отключён на уровне прошивки.
+- **Apple iOS / macOS, безопасность WAN и поддержка режима точки доступа (AP / Bridge):** Убран мусорный `ula_prefix` IPv6 и настроен DHCP Option 6 (`1.1.1.1, 8.8.8.8, 192.168.0.1`) под RFC 9462 DDR — iPhone сразу уходит на быстрый HTTP/3 DoH. Веб-сервер `uhttpd` настроен на прослушивание `0.0.0.0:80` и `[::]:80` с защитой RFC 1918, входящий порт WAN (`eth0.1:80`) наглухо закрыт брандмауэром (LuCI доступен при любой смене подсети LAN и в режиме Dumb AP / Bridge), а WPS отключён на уровне прошивки.
 ---
 
 ## Карта репозитория | Repository Layout
@@ -115,11 +115,11 @@
 ## Контрольные суммы | SHA-256 Checksums (`v4.14.187-r3-ac10-hybrid`)
 
 ```text
-88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin
-88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin
-ad3e4ab89548e0c32f98d6c80f24cdbb691ec027dd791a6dd82ebd0919e3014b  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin
+7bd99d144fb90fade7f7ecace0d2ebc2de7e34afb627231cc9305bd3ccceabc7  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin
+7bd99d144fb90fade7f7ecace0d2ebc2de7e34afb627231cc9305bd3ccceabc7  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin
+8f77ff1b8eaf4b0cbc06db8c377ed3a22235ae1db45f65f0fef592f627e5af22  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin
 f5c7d1755689dd5319420289d8ebd4e661d418f56d99b775f6111c48a3c96345  tenda-ac10-v1.dtb
 a7d4d27f7b1d52526e24348a6a21c5a56740d41b357b17c9e3bc4d8db9f9b0fa  Tenda_AC10_V1_Stock_TFTP_Recovery.bin
-e3064eb3c007998d261b6fb4668450e219552d0120e198018e0fe67511f62608  Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip
-20e155d62a6843151de145588148f89a364a3a003db3e59116e9be239ac64228  Tenda_AC10_V1_Build_and_Router_Scripts.zip
+d3240d5adbf7f0b498cac3c33cc463a4f214ccfc57948f439fdc0b282ba10b42  Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip
+171574fa8c9f4960b03cc0191cb6660f677cff9d93faca44fb819cfbcdbbeda2  Tenda_AC10_V1_Build_and_Router_Scripts.zip
 ```

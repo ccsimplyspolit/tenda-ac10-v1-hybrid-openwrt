@@ -5,7 +5,7 @@
  * Target: Realtek RTL8197FS (MIPS 24KEc @ 1000 MHz, 64 MB DDR2 DRAM, 8 MB SPI NOR Flash)
  * Switch: Realtek RTL8367RB-VB Gigabit Switch (SMI on GPIO 18/19, Reset GPIO 58, CPU RGMII Port 6)
  * Wireless: Integrated RTL8197FS (2.4 GHz 2x2 b/g/n WMAC @ 0x18640000) + RTL8822BE (5 GHz 2x2 ac Wave 2, PCIe RC0)
- * RF Front-Ends: Skyworth RFE Type 6 (5 GHz External PA/LNA) + Skyworth RFE Type 5 (2.4 GHz)
+ * RF Front-Ends: Skyworth SE5003L1 RFE Type 6 (5 GHz External PA/LNA) + Skyworth SKY85303-11 RFE Type 5 (2.4 GHz)
  */
 
 /dts-v1/;
@@ -25,7 +25,7 @@
 	};
 
 	chosen {
-		bootargs = "console=ttyS0,38400";
+		bootargs = "console=ttyS0,115200";
 	};
 
 	cpus {
@@ -123,7 +123,7 @@
 				read-only;
 			};
 
-			/* Factory RF calibration & board parameters (ASCII key-value) */
+			/* Factory RF calibration & board parameters (ASCII key-value + LE CRC32 header) */
 			partition@20000 {
 				label = "calibration";
 				reg = <0x020000 0x010000>; /* 64 KB */
@@ -218,53 +218,50 @@
 
 		reset {
 			label = "reset";
-			gpios = <&gpio1 22 GPIO_ACTIVE_LOW>; /* vendor GPIO 54 */
+			gpios = <&gpio1 22 GPIO_ACTIVE_LOW>; /* vendor GPIO 54 (Bank G, Pin 6) */
 			linux,code = <KEY_RESTART>;
 		};
 
 		wps {
 			label = "wps";
-			gpios = <&gpio1 24 GPIO_ACTIVE_LOW>; /* vendor GPIO 56 */
+			gpios = <&gpio1 24 GPIO_ACTIVE_LOW>; /* vendor GPIO 56 (Bank H, Pin 0) */
 			linux,code = <KEY_WPS_BUTTON>;
 		};
 	};
 
-	leds {
+	/*
+	 * Panel LEDs verified from stock vmlinux rtl819x_gpio_peripheral_init() @ 0x806C0030:
+	 *   rtl_pdata_led1 = GPIO 57 (Bank H, Pin 1 -> <&gpio1 25 GPIO_ACTIVE_LOW>) = "sys led"
+	 *   rtl_pdata_led2 = GPIO 33 (Bank E, Pin 1 -> <&gpio1 1  GPIO_ACTIVE_LOW>) = "wps led"
+	 */
+	gpio-leds {
 		compatible = "gpio-leds";
 
-		sys {
+		led_sys: sys {
 			label = "tenda:blue:sys";
 			gpios = <&gpio1 25 GPIO_ACTIVE_LOW>;
-		};
-
-		wan {
-			label = "tenda:blue:wan";
-			gpios = <&gpio0 23 GPIO_ACTIVE_LOW>;
-		};
-
-		lan {
-			label = "tenda:blue:lan";
-			gpios = <&gpio0 31 GPIO_ACTIVE_LOW>;
-		};
-
-		wifi {
-			label = "tenda:blue:wifi";
-			gpios = <&gpio1 1 GPIO_ACTIVE_LOW>;
+			default-state = "on";
 		};
 
 		wps {
 			label = "tenda:blue:wps";
-			gpios = <&gpio0 22 GPIO_ACTIVE_LOW>;
+			gpios = <&gpio1 1 GPIO_ACTIVE_LOW>;
 		};
 	};
 
 	/*
 	 * Realtek RTL8367RB-VB External 5-Port Gigabit Switch
-	 *   MDC  (Clock) : GPIO 18 (gpio0 pin 18)
-	 *   MDIO (Data)  : GPIO 19 (gpio0 pin 19)
-	 *   RST  (Reset) : GPIO 58 (gpio1 pin 26, active-low)
+	 *   MDC  (Clock) : GPIO 18 (Bank C, Pin 2 -> <&gpio0 18 GPIO_ACTIVE_HIGH>)
+	 *   MDIO (Data)  : GPIO 19 (Bank C, Pin 3 -> <&gpio0 19 GPIO_ACTIVE_HIGH>)
+	 *   RST  (Reset) : GPIO 58 (Bank H, Pin 2 -> <&gpio1 26 GPIO_ACTIVE_LOW>, PEFGH_DAT BIT(26))
 	 *   CPU RGMII    : Port 6 (EXT_PORT_1, 1000M full-duplex, txDelay=0, rxDelay=2)
 	 *   Physical Map : Port 3 = WAN (VID 1), Ports 2/1/0 = LAN1/LAN2/LAN3 (VID 2)
+	 *
+	 * HAZARD NOTE (4PDA #1943 / booter_stage2 @ 0x8000B518):
+	 *   Vendor GPIO 58 (<&gpio1 26>) is physically wired to RTL8367RB-VB hardware RESET.
+	 *   Realtek Booter v3.4.11B.9 releases GPIO 58 at boot and initializes RGMII + SMI.
+	 *   Do NOT unmask realtek,reset-gpio or export/toggle GPIO 58 from userspace without
+	 *   a full switch + ASIC re-init, or all RJ45 switch ports will drop immediately!
 	 */
 	rtl8367b {
 		compatible = "realtek,rtl8367b";
@@ -273,9 +270,7 @@
 		realtek,extif1 = <1 0 1 1 1 1 1 1 2>;
 		gpio-sck = <&gpio0 18 GPIO_ACTIVE_HIGH>;
 		gpio-sda = <&gpio0 19 GPIO_ACTIVE_HIGH>;
-		realtek,smi-mdc-gpio = <&gpio0 18 GPIO_ACTIVE_HIGH>;
-		realtek,smi-mdio-gpio = <&gpio0 19 GPIO_ACTIVE_HIGH>;
-		realtek,reset-gpio = <&gpio1 26 GPIO_ACTIVE_LOW>;
+		/* realtek,reset-gpio = <&gpio1 26 GPIO_ACTIVE_LOW>; */
 		realtek,ext-rgmii-delay = <0x02>;
 	};
 };

@@ -63,9 +63,9 @@
 
 [size=3][b][color=darkblue]Какой файл прошивки выбрать на странице релиза:[/color][/b][/size]
 [list]
-[*][b]tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin[/b] (5 681 862 байта) — [b]если прошиваетесь прямо из родного веб-меню Tenda через браузер[/b]. В начало добавлена правильная 64-байтная шапка [font="Courier New"][b]trx2[/b][/font] с кодом модели [font="Courier New"][b]0x00030028[/b][/font], так что стоковая проверка примет файл как родной без ошибки «Format error!».
-[*][b]tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin[/b] (5 681 798 байт) — [b]для прошивки в 1 клик через батник по TFTP и для раскирпичивания[/b]. Собран одним монолитным сегментом [font="Courier New"][b]cs6c[/b][/font] с записью на [font="Courier New"][b]0x00030000[/b][/font], поэтому гарантированно не задевает загрузчик.
-[*][b]tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin[/b] (5 681 798 байт) — для обновления поверх уже стоящей OpenWrt через меню LuCI или команду [font="Courier New"][b]sysupgrade[/b][/font].
+[*][b]tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin[/b] (5 542 598 байт) — [b]если прошиваетесь прямо из родного веб-меню Tenda через браузер[/b]. В начало добавлена правильная 64-байтная шапка [font="Courier New"][b]trx2[/b][/font] с кодом модели [font="Courier New"][b]0x00030028[/b][/font], так что стоковая проверка примет файл как родной без ошибки «Format error!».
+[*][b]tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin[/b] (5 542 534 байта) — [b]для прошивки в 1 клик через батник по TFTP и для раскирпичивания[/b]. Собран одним монолитным сегментом [font="Courier New"][b]cs6c[/b][/font] с записью на [font="Courier New"][b]0x00030000[/b][/font], поэтому гарантированно не задевает загрузчик.
+[*][b]tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin[/b] (5 542 534 байта) — для обновления поверх уже стоящей OpenWrt через меню LuCI или команду [font="Courier New"][b]sysupgrade[/b][/font].
 [*][b]Tenda_AC10_V1_Stock_TFTP_Recovery.bin[/b] (7 588 884 байта) — чистая заводская прошивка Tenda [font="Courier New"][b]V15.03.06.23[/b][/font] на случай, если захотите за пару минут откатиться обратно на сток.
 [/list]
 
@@ -78,13 +78,13 @@
 
 [size=3][b][color=darkblue]Контрольные суммы SHA-256 (сверьте перед заливкой):[/color][/b][/size]
 [code]
-88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin
-88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin
-ad3e4ab89548e0c32f98d6c80f24cdbb691ec027dd791a6dd82ebd0919e3014b  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin
+7bd99d144fb90fade7f7ecace0d2ebc2de7e34afb627231cc9305bd3ccceabc7  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin
+7bd99d144fb90fade7f7ecace0d2ebc2de7e34afb627231cc9305bd3ccceabc7  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin
+8f77ff1b8eaf4b0cbc06db8c377ed3a22235ae1db45f65f0fef592f627e5af22  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin
 f5c7d1755689dd5319420289d8ebd4e661d418f56d99b775f6111c48a3c96345  tenda-ac10-v1.dtb
 a7d4d27f7b1d52526e24348a6a21c5a56740d41b357b17c9e3bc4d8db9f9b0fa  Tenda_AC10_V1_Stock_TFTP_Recovery.bin
-e3064eb3c007998d261b6fb4668450e219552d0120e198018e0fe67511f62608  Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip
-20e155d62a6843151de145588148f89a364a3a003db3e59116e9be239ac64228  Tenda_AC10_V1_Build_and_Router_Scripts.zip
+d3240d5adbf7f0b498cac3c33cc463a4f214ccfc57948f439fdc0b282ba10b42  Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip
+171574fa8c9f4960b03cc0191cb6660f677cff9d93faca44fb819cfbcdbbeda2  Tenda_AC10_V1_Build_and_Router_Scripts.zip
 [/code]
 [/spoiler]
 
@@ -216,6 +216,11 @@ uci commit network
 [size=3][b][color=darkblue]5. Желтая плашка на iPhone «Эта сеть блокирует защищенный трафик DNS»[/color][/b][/size]
 Айфоны при входе в сеть задумывались на 15–20 секунд из-за префикса [font="Courier New"][b]ula_prefix[/b][/font] IPv6 и требования Apple RFC 9462 DDR к публичному сертификату на DNS-сервере.
 [b]Как вылечили:[/b] Убран префикс [font="Courier New"][b]ula_prefix[/b][/font], отключены [font="Courier New"][b]ra/dhcpv6[/b][/font] и порядок выдачи DNS настроен как [font="Courier New"][b]6,1.1.1.1,8.8.8.8,192.168.0.1[/b][/font]. Устройства Apple мгновенно поднимают защищенный DoH по HTTP/3 QUIC к [font="Courier New"][b]1.1.1.1:443[/b][/font], сайты открываются без задержек.
+
+[size=3][b][color=darkblue]6. Универсальный доступ к LuCI в режиме точки доступа / моста (AP / Bridge) и безопасность WAN[/color][/b][/size]
+Если привязать веб-сервер uhttpd исключительно к жесткому IP 192.168.0.1, при переводе роутера в режим точки доступа (AP/Bridge) или смене подсети LAN доступ к веб-панели управления LuCI теряется.
+[b]Как сделано в r3:[/b] Веб-сервер uhttpd настроен на прослушивание универсальных сокетов [font="Courier New"][b]0.0.0.0:80[/b][/font] и [font="Courier New"][b][::]:80[/b][/font] с включенным фильтром частных сетей RFC 1918 ([font="Courier New"][b]rfc1918_filter='1'[/b][/font]). Одновременно со стороны внешнего интерфейса WAN ([font="Courier New"][b]eth0.1[/b][/font]) входящие соединения на порт 80 TCP/UDP наглухо сбрасываются правилом файрвола ([font="Courier New"][b]DROP[/b][/font]).
+[b]Результат:[/b] Роутер можно свободно переключать в режим точки доступа (AP), моста (WDS/Bridge) или менять адрес подсети LAN на любой другой (например, 192.168.1.1 или 10.0.0.1) — веб-интерфейс LuCI всегда доступен со стороны клиентов локальной сети, а со стороны провайдера роутер полностью невидим.
 [/spoiler]
 
 [spoiler=7. Всеобъемлющий Pre-Flight FAQ по 7 ключевым областям (Самопроверка перед прошивкой)]
@@ -224,7 +229,7 @@ uci commit network
 [b]─── 1. БЕЗОПАСНОСТЬ УСТАНОВКИ И ЗАГРУЗЧИК (INSTALLATION SAFETY) ───[/b]
 
 [b]В1.1: Можно ли ставить эту прошивку на Tenda AC10 V2.0 или V3.0?[/b]
-[b]ОТВЕТ: КАТЕГОРИЧЕСКИ НЕТ.[/b] Ревизии V2.0 и V3.0 построены на процессоре RTL8197FH под управлением операционной системы eCos RTOS и имеют всего 2 МБ флеш-памяти (заводской образ 1.73 МБ). Заливка нашего 5.68 МБ Linux-образа перетрет загрузчик eCos и приведет к мертвому окирпичиванию, которое лечится только выпаиванием микросхемы флеш-памяти.
+[b]ОТВЕТ: КАТЕГОРИЧЕСКИ НЕТ.[/b] Ревизии V2.0 и V3.0 построены на процессоре RTL8197FH под управлением операционной системы eCos RTOS и имеют всего 2 МБ флеш-памяти (заводской образ 1.73 МБ). Заливка нашего 5.54 МБ Linux-образа перетрет загрузчик eCos и приведет к мертвому окирпичиванию, которое лечится только выпаиванием микросхемы флеш-памяти.
 
 [b]В1.2: Что за баг слота задержки $s7=0 на 0x80001C2C в Realtek Booter и как он нейтрализован?[/b]
 [b]ОТВЕТ:[/b] В загрузчике Realtek Booter v3.4.11B.9 по адресу 0x800019D0 (функция AutoBurn) адрес записи хранится в регистре $s7. В двухсегментных образах ветвление цикла содержит инструкцию "move $s7, $s2", где $s2 равен 0. Из-за этого адрес назначения для сегмента 2 сбрасывается в 0x00000000, и образ пишется прямо поверх загрузчика mtd0! Наш образ factory.bin скомпилирован строго в виде односегментного монолитного контейнера cs6c (burnAddr = 0x00030000, контрольная сумма 0x0000), выходящего из цикла после первого сегмента и никогда не задевающего этот баг.
@@ -248,6 +253,9 @@ uci commit network
 
 [b]В2.4: Как устроен автономный перенос настроек провайдера?[/b]
 [b]ОТВЕТ:[/b] Скрипт Configure_OpenWrt_ISP_WAN_and_WiFi.bat автономно парсит файл RouterCfm.cfg, вытягивает клонированный MAC, статический IP/DNS, привязки DHCP и параметры Wi-Fi, после чего прописывает их через локальный SSH uci за 10 секунд без выхода в интернет, маскируя пароли в окне консоли.
+
+[b]В2.5: Как настроить режим точки доступа (Access Point / Bridge) и будет ли доступен веб-интерфейс LuCI?[/b]
+[b]ОТВЕТ:[/b] В ревизии r3 веб-сервер uhttpd слушает 0.0.0.0:80 и [::]:80 (с фильтром частных сетей RFC 1918 и блокировкой со стороны WAN eth0.1 в файрволе). Поэтому при переводе роутера в режим AP/Bridge (отключение DHCP-сервера на LAN, смена IP-адреса на подсеть основного роутера или получение IP по DHCP-клиенту на br-lan) интерфейс LuCI остается полностью доступным по новому локальному адресу без ручной правки uhttpd!
 
 [b]─── 3. ОТКАТ И АВАРИЙНОЕ ВОССТАНОВЛЕНИЕ (ROLLBACK & RECOVERY) ───[/b]
 
@@ -280,13 +288,13 @@ uci commit network
 
 [b]В6.1: Каковы точные проверенные размеры и SHA-256 суммы всех релизных файлов r3?[/b]
 [b]ОТВЕТ:[/b]
-88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin (5 681 798 B)
-88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin (5 681 798 B)
-ad3e4ab89548e0c32f98d6c80f24cdbb691ec027dd791a6dd82ebd0919e3014b  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin (5 681 862 B)
+7bd99d144fb90fade7f7ecace0d2ebc2de7e34afb627231cc9305bd3ccceabc7  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin (5 542 534 B)
+7bd99d144fb90fade7f7ecace0d2ebc2de7e34afb627231cc9305bd3ccceabc7  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin (5 542 534 B)
+8f77ff1b8eaf4b0cbc06db8c377ed3a22235ae1db45f65f0fef592f627e5af22  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin (5 542 598 B)
 f5c7d1755689dd5319420289d8ebd4e661d418f56d99b775f6111c48a3c96345  tenda-ac10-v1.dtb (4 182 B)
 a7d4d27f7b1d52526e24348a6a21c5a56740d41b357b17c9e3bc4d8db9f9b0fa  Tenda_AC10_V1_Stock_TFTP_Recovery.bin (7 588 884 B)
-e3064eb3c007998d261b6fb4668450e219552d0120e198018e0fe67511f62608  Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip (71 987 B)
-20e155d62a6843151de145588148f89a364a3a003db3e59116e9be239ac64228  Tenda_AC10_V1_Build_and_Router_Scripts.zip (38 811 B)
+d3240d5adbf7f0b498cac3c33cc463a4f214ccfc57948f439fdc0b282ba10b42  Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip (72 336 B)
+171574fa8c9f4960b03cc0191cb6660f677cff9d93faca44fb819cfbcdbbeda2  Tenda_AC10_V1_Build_and_Router_Scripts.zip (39 247 B)
 
 [b]─── 7. СИНХРОНИЗАЦИЯ РЕПОЗИТОРИЕВ И НАБОРА (GIT & KIT SYNC) ───[/b]
 

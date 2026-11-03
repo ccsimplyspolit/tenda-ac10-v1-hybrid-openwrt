@@ -22,7 +22,7 @@
 [list]
 [*][b]Tenda AC10 V1.0 (FCC ID: V7TAC10):[/b] Процессор RTL8197FS (1 ГГц), Linux-прошивки V15.03.06.xx, Flash 8 МБ, RAM 64 МБ. Поддерживает OpenWrt.
 [*][b]Tenda AC10 V2.0 / V3.0:[/b] Процессор RTL8197FH, операционная система реального времени [b]eCos RTOS[/b] (прошивки V02.03.xx / V03.03.xx), Flash всего [b]2 МБ[/b] (заводской образ 1.73 МБ), RAM 16 МБ.
-[color=red][b]Попытка залить прошивку от V1.0 (5.68 МБ) в V2.0/V3.0 (2 МБ) физически стирает загрузчик eCos и превращает роутер в мертвый «кирпич» без сетевого восстановления (только выпаивание флешки)![/b][/color]
+[color=red][b]Попытка залить прошивку от V1.0 (5.54 МБ) в V2.0/V3.0 (2 МБ) физически стирает загрузчик eCos и превращает роутер в мертвый «кирпич» без сетевого восстановления (только выпаивание флешки)![/b][/color]
 [/list][/quote]
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -44,16 +44,17 @@
 [*][b]Wi-Fi 2.4 ГГц (SKY85303-11):[/b] Скрипт /bin/set-mib.sh считывает заводские калибровки мощности и термокомпенсации из mtd1, активированы ampdu=1 и amsdu=1.
 [*][b]Аппаратный NAT и свитч:[/b] Режим WANRouteMode=ToCpu (SWTCR0 |= 0x400C) позволяет держать аппаратное ускорение L2/L3 на кабеле (~940 Мбит/с при 0.5% CPU) одновременно с беспроводным трафиком без черных дыр.
 [*][b]Быстрый откат на заводскую прошивку:[/b] Полный образ Stock Recovery (7 588 884 байта) возвращается через батник за пару минут.
+[*][b]Режим точки доступа (AP/Bridge) и веб-доступ:[/b] Веб-сервер uhttpd слушает 0.0.0.0:80 и [::]:80 с фильтром RFC 1918 и защитой от WAN — доступ к LuCI сохраняется в режиме моста/точки доступа и при любой смене подсети LAN.
 [/list]
 
 [b]Файлы и контрольные суммы SHA-256:[/b]
 [code]
-ad3e4ab89548e0c32f98d6c80f24cdbb691ec027dd791a6dd82ebd0919e3014b  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin (5 681 862 B)
-88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin    (5 681 798 B)
-88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin (5 681 798 B)
+8f77ff1b8eaf4b0cbc06db8c377ed3a22235ae1db45f65f0fef592f627e5af22  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin (5 542 598 B)
+7bd99d144fb90fade7f7ecace0d2ebc2de7e34afb627231cc9305bd3ccceabc7  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin    (5 542 534 B)
+7bd99d144fb90fade7f7ecace0d2ebc2de7e34afb627231cc9305bd3ccceabc7  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin (5 542 534 B)
 a7d4d27f7b1d52526e24348a6a21c5a56740d41b357b17c9e3bc4d8db9f9b0fa  Tenda_AC10_V1_Stock_TFTP_Recovery.bin            (7 588 884 B)
-e3064eb3c007998d261b6fb4668450e219552d0120e198018e0fe67511f62608  Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip     (71 987 B)
-20e155d62a6843151de145588148f89a364a3a003db3e59116e9be239ac64228  Tenda_AC10_V1_Build_and_Router_Scripts.zip       (38 811 B)
+d3240d5adbf7f0b498cac3c33cc463a4f214ccfc57948f439fdc0b282ba10b42  Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip     (72 336 B)
+171574fa8c9f4960b03cc0191cb6660f677cff9d93faca44fb819cfbcdbbeda2  Tenda_AC10_V1_Build_and_Router_Scripts.zip       (39 247 B)
 [/code]
 [/spoiler]
 

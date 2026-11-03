@@ -23,6 +23,8 @@
    - Событийный демон `/etc/init.d/dir842-l2flush` сбрасывает устаревшие записи L2 только при реальной смене линка/FDB.
 4. **Идеальная работа с Apple iPhone / Mac (RFC 9462 DDR) и жёсткая защита WAN:**
    - Вычищен локальный `ula_prefix` IPv6, настроен `dhcp_option '6,1.1.1.1,8.8.8.8,192.168.0.1'` (мгновенный HTTP/3 DoH без предупреждений iOS), закрыты внешние сокеты `uhttpd`/`dnsmasq` со стороны провайдера, а уязвимый протокол WPS полностью отключён.
+5. **Поддержка любого IP-адреса LAN и режима точки доступа (Dumb AP / Bridge) без потери LuCI (Issue #1 fix):**
+   - Сервер `uhttpd` переведён на прослушивание `0.0.0.0:80` и `[::]:80` с фильтром `rfc1918_filter='1'`, а в брандмауэре добавлено явное правило `Block-WAN-HTTP` и запрет в `/etc/firewall.user` (`iptables/ip6tables -I INPUT -i eth0.1 -p tcp --dport 80 -j DROP`). Веб-интерфейс LuCI остаётся доступным при любой смене подсети LAN и в режиме моста (`proto=dhcp`), при этом WAN-интерфейс со стороны провайдера остаётся полностью изолированным.
 
 ---
 
@@ -30,21 +32,21 @@
 
 | Файл | Размер | Для чего нужен |
 |---|---:|---|
-| **`tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin`** | `5,681,862` Б | **Прямая прошивка через браузер из родного меню Tenda** (`192.168.0.1` -> Обновление ПО, без ошибки `"Format error!"`). |
-| **`tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin`** | `5,681,798` Б | **Прошивка в 1 клик по TFTP и раскирпичивание** через загрузчик (`192.168.1.6:69`, безопасный односегментный `cs6c`). |
-| **`tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin`** | `5,681,798` Б | Обновление поверх уже установленной OpenWrt (через LuCI или `sysupgrade`). |
-| **`Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip`** | `71,987` Б | Все `.bat` / `.ps1` / `.py` скрипты автопрошивки, переноса настроек провайдера из `RouterCfm.cfg` и восстановления сети ПК. |
-| **`Tenda_AC10_V1_Build_and_Router_Scripts.zip`** | `38,811` Б | Сборочный скрипт `build_hybrid_openwrt_ac10.sh`, `set-mib.sh`, `dir842-l2flush`, `tenda-ac10-v1.dts`, конфиг ядра и утилита `mtd1`. |
+| **`tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin`** | `5,542,598` Б | **Прямая прошивка через браузер из родного меню Tenda** (`192.168.0.1` -> Обновление ПО, без ошибки `"Format error!"`). |
+| **`tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin`** | `5,542,534` Б | **Прошивка в 1 клик по TFTP и раскирпичивание** через загрузчик (`192.168.1.6:69`, безопасный односегментный `cs6c`). |
+| **`tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin`** | `5,542,534` Б | Обновление поверх уже установленной OpenWrt (через LuCI или `sysupgrade`). |
+| **`Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip`** | `72,336` Б | Все `.bat` / `.ps1` / `.py` скрипты автопрошивки, переноса настроек провайдера из `RouterCfm.cfg` и восстановления сети ПК. |
+| **`Tenda_AC10_V1_Build_and_Router_Scripts.zip`** | `39,247` Б | Сборочный скрипт `build_hybrid_openwrt_ac10.sh`, `set-mib.sh`, `dir842-l2flush`, `tenda-ac10-v1.dts`, конфиг ядра и утилита `mtd1`. |
 | **`Tenda_AC10_V1_Stock_TFTP_Recovery.bin`** | `7,588,884` Б | Чистая заводская прошивка Tenda `V15.03.06.23` для отката обратно на сток по TFTP. |
 
 ## Контрольные суммы | SHA-256 Checksums (`v4.14.187-r3-ac10-hybrid`)
 
 ```text
-88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin
-88dd65babeead765efbd9d46d8dd13a8588b671392838962f26be18119316e81  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin
-ad3e4ab89548e0c32f98d6c80f24cdbb691ec027dd791a6dd82ebd0919e3014b  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin
+7bd99d144fb90fade7f7ecace0d2ebc2de7e34afb627231cc9305bd3ccceabc7  tenda-ac10-v1-hybrid-openwrt-4.14-factory.bin
+7bd99d144fb90fade7f7ecace0d2ebc2de7e34afb627231cc9305bd3ccceabc7  tenda-ac10-v1-hybrid-openwrt-4.14-sysupgrade.bin
+8f77ff1b8eaf4b0cbc06db8c377ed3a22235ae1db45f65f0fef592f627e5af22  tenda-ac10-v1-hybrid-openwrt-4.14-webupgrade.bin
 f5c7d1755689dd5319420289d8ebd4e661d418f56d99b775f6111c48a3c96345  tenda-ac10-v1.dtb
 a7d4d27f7b1d52526e24348a6a21c5a56740d41b357b17c9e3bc4d8db9f9b0fa  Tenda_AC10_V1_Stock_TFTP_Recovery.bin
-e3064eb3c007998d261b6fb4668450e219552d0120e198018e0fe67511f62608  Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip
-20e155d62a6843151de145588148f89a364a3a003db3e59116e9be239ac64228  Tenda_AC10_V1_Build_and_Router_Scripts.zip
+d3240d5adbf7f0b498cac3c33cc463a4f214ccfc57948f439fdc0b282ba10b42  Tenda_AC10_V1_Offline_Autonomous_Toolkit.zip
+171574fa8c9f4960b03cc0191cb6660f677cff9d93faca44fb819cfbcdbbeda2  Tenda_AC10_V1_Build_and_Router_Scripts.zip
 ```
