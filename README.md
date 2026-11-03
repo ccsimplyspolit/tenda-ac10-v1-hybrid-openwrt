@@ -1,5 +1,7 @@
 # Tenda AC10 V1.0 — Hybrid OpenWrt 4.14.187, Скрипты автонастройки и TFTP-раскирпичивание (RU / EN)
 
+<p align="center"><img src="docs/images/hero-banner.svg" width="100%" alt="Tenda AC10 V1.0 Hybrid OpenWrt 4.14.187 Suite" /></p>
+
 [![Build Tenda AC10 V1.0 Hybrid OpenWrt 4.14](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/actions/workflows/build-ac10-hybrid-openwrt.yml/badge.svg)](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/actions/workflows/build-ac10-hybrid-openwrt.yml) [![Deploy Documentation Portal to GitHub Pages](https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/actions/workflows/deploy-pages.yml/badge.svg)](https://ccsimplyspolit.github.io/tenda-ac10-v1-hybrid-openwrt/)
 
 > **СТОП — сначала проверьте наклейку на дне роутера! / CHECK YOUR STICKER FIRST!**  

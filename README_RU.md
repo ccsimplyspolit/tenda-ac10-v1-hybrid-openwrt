@@ -1,5 +1,7 @@
 # Tenda AC10 V1.0 — Полное русское руководство: Hybrid OpenWrt 4.14.187, Stock+, скрипты и раскирпичивание
 
+<p align="center"><img src="docs/images/hero-banner.svg" width="100%" alt="Tenda AC10 V1.0 Hybrid OpenWrt 4.14.187 Suite" /></p>
+
 [![Лицензия: MIT / GPLv2](https://img.shields.io/badge/Лицензия-MIT%20%2F%20GPLv2-blue.svg)](LICENSE)
 [![Процессор: Realtek RTL8197FS](https://img.shields.io/badge/SoC-Realtek%20RTL8197FS%201GHz-green.svg)](docs/hardware/RTL8197FS_Architecture.md)
 [![Ядро: Linux 4.14.187](https://img.shields.io/badge/OpenWrt-Linux%204.14.187-informational.svg)](docs/openwrt_hybrid/ENGINEERING_POSTMORTEM_ALL_PROBLEMS_AND_SOLUTIONS_RU.md)

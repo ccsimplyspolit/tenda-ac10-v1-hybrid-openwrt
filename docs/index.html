@@ -22,7 +22,14 @@
       --code-bg: #0b0f14;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    a { color: var(--accent); text-decoration: underline; text-decoration-color: rgba(88, 166, 255, 0.35); text-underline-offset: 3px; }
+    a:hover { color: #79c0ff; text-decoration-color: #79c0ff; }
+    a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    h1, h2 { font-size: 20px; }
+    h3, h4 { font-size: 16px; }
     body {
+      font-size: 16px;
+      overflow-wrap: anywhere;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
@@ -52,14 +59,14 @@
       align-items: center;
       gap: 10px;
       font-weight: 700;
-      font-size: 1.15rem;
+      font-size: 20px;
       color: var(--text);
       text-decoration: none;
     }
     .badge {
       display: inline-block;
       padding: 2px 8px;
-      font-size: 0.75rem;
+      font-size: 12px;
       font-weight: 600;
       border-radius: 12px;
       background: var(--green-glow);
@@ -84,7 +91,7 @@
       padding: 6px 14px;
       cursor: pointer;
       font-weight: 600;
-      font-size: 0.85rem;
+      font-size: 14px;
       transition: all 0.2s;
     }
     .lang-btn.active {
@@ -109,7 +116,7 @@
       border-radius: 6px 6px 0 0;
       cursor: pointer;
       font-weight: 600;
-      font-size: 0.9rem;
+      font-size: 14px;
       white-space: nowrap;
       transition: all 0.2s;
     }
@@ -147,7 +154,7 @@
       margin-bottom: 20px;
     }
     .card-title {
-      font-size: 1.25rem;
+      font-size: 20px;
       font-weight: 700;
       margin-bottom: 12px;
       display: flex;
@@ -180,13 +187,13 @@
       border-radius: 6px;
     }
     .spec-label {
-      font-size: 0.8rem;
+      font-size: 12px;
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
     .spec-val {
-      font-size: 1rem;
+      font-size: 16px;
       font-weight: 600;
       margin-top: 4px;
     }
@@ -194,7 +201,7 @@
       width: 100%;
       border-collapse: collapse;
       margin: 16px 0;
-      font-size: 0.9rem;
+      font-size: 14px;
     }
     th, td {
       border: 1px solid var(--border);
@@ -216,7 +223,7 @@
       background: var(--code-bg);
       padding: 2px 6px;
       border-radius: 4px;
-      font-size: 0.85rem;
+      font-size: 14px;
       color: #79c0ff;
     }
     pre {
@@ -225,7 +232,7 @@
       border-radius: 6px;
       padding: 14px;
       overflow-x: auto;
-      font-size: 0.85rem;
+      font-size: 14px;
       margin: 12px 0;
     }
     .copy-btn {
@@ -233,7 +240,7 @@
       border: 1px solid var(--border);
       color: var(--text);
       padding: 4px 10px;
-      font-size: 0.75rem;
+      font-size: 12px;
       font-weight: 600;
       border-radius: 4px;
       cursor: pointer;
@@ -264,7 +271,7 @@
     }
     .gallery-caption {
       padding: 12px 16px;
-      font-size: 0.85rem;
+      font-size: 14px;
       color: var(--muted);
     }
     .faq-q {
@@ -284,7 +291,7 @@
       text-align: center;
       color: var(--muted);
       border-top: 1px solid var(--border);
-      font-size: 0.85rem;
+      font-size: 14px;
     }
   </style>
 </head>
@@ -297,9 +304,9 @@
       <span class="badge">v4.14.187-r3-ac10-hybrid</span>
     </a>
     <div style="display:flex; align-items:center; gap:12px;">
-      <a href="https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt" target="_blank" style="color:var(--muted); text-decoration:none; font-size:0.85rem;">GitHub</a>
-      <a href="https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/latest" target="_blank" style="color:var(--muted); text-decoration:none; font-size:0.85rem;">Releases</a>
-      <a href="https://4pda.to/forum/index.php?showtopic=885989&view=findpost&p=136460081" target="_blank" style="color:var(--muted); text-decoration:none; font-size:0.85rem;">4PDA (#3585)</a>
+      <a href="https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt" target="_blank" style="color:var(--muted); text-decoration:none; font-size:14px;">GitHub</a>
+      <a href="https://github.com/ccsimplyspolit/tenda-ac10-v1-hybrid-openwrt/releases/latest" target="_blank" style="color:var(--muted); text-decoration:none; font-size:14px;">Releases</a>
+      <a href="https://4pda.to/forum/index.php?showtopic=885989&view=findpost&p=136460081" target="_blank" style="color:var(--muted); text-decoration:none; font-size:14px;">4PDA (#3585)</a>
       <div class="lang-toggle">
         <button class="lang-btn active" onclick="setLang('ru')">RU</button>
         <button class="lang-btn" onclick="setLang('en')">EN</button>
@@ -323,7 +330,7 @@
   <section id="tab-overview" class="tab-content active">
     <div class="card">
       <div class="alert-box">
-        <div class="alert-title"><span class="t-ru">⚠️ ВНИМАНИЕ: Сборка ТОЛЬКО для Tenda AC10 Ver: V1.0!</span><span class="t-en">⚠️ WARNING: For Tenda AC10 Ver: V1.0 ONLY!</span></div>
+        <div class="alert-title"><span class="t-ru">[!] ВНИМАНИЕ: Сборка ТОЛЬКО для Tenda AC10 Ver: V1.0!</span><span class="t-en">[!] WARNING: For Tenda AC10 Ver: V1.0 ONLY!</span></div>
         <p class="t-ru">Ревизии <strong>V2.0 и V3.0</strong> используют чип RTL8197FH под управлением eCos RTOS и имеют всего <strong>2 МБ</strong> флеш-памяти (заводской образ 1.73 МБ). Попытка залить 5.68 МБ образ Linux уничтожит загрузчик eCos насмерть и потребует выпаивания чипа флеш-памяти!</p>
         <p class="t-en">Revisions <strong>V2.0 &amp; V3.0</strong> use RTL8197FH running eCos RTOS with only <strong>2 MB</strong> flash (stock image 1.73 MB). Flashing a 5.68 MB Linux image permanently destroys the bootloader, requiring SPI desoldering!</p>
       </div>
