@@ -149,7 +149,7 @@ The on-board Realtek RTL8822BE 5 GHz PCIe wireless adapter features a blank phys
 
 ### Q16: How do I dump the full 8 MB SPI flash before upgrading?
 While running stock firmware connected to your router via ethernet:
-1. Open your browser and navigate to:
+1. Open your browser and move to:
    ```
    http://192.168.0.1/cgi-bin/DownloadFlash
    ```

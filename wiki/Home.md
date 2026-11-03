@@ -2,7 +2,7 @@
 
 > **Добро пожаловать! / Welcome!**  
 > Данная база знаний содержит полную техническую документацию, результаты бинарного реверс-инжиниринга, руководство по аварийному TFTP-восстановлению и две стабильные прошивки для маршрутизатора **Tenda AC10 V1.0**.  
-> This knowledge base provides comprehensive technical documentation, silicon-level reverse-engineering dossiers, offline disaster recovery procedures, and two production firmware solutions for the **Tenda AC10 V1.0** gigabit wireless router.
+> This knowledge base provides full technical documentation, silicon-level reverse-engineering dossiers, offline disaster recovery procedures, and two production firmware solutions for the **Tenda AC10 V1.0** gigabit wireless router.
 
 ---
 

@@ -77,7 +77,7 @@ Upstream Linux kernel drivers (`rtw88_8822be` and `rtw88_core`):
    - Sets crystal capacitor tuning (`xcap`) to `0` (instead of `27`).
    - Sets TX power to absolute minimum (-10 dBm) to prevent thermal self-destruction.
 3. Because the driver sets `RFE_TYPE = 0`, the external Skyworth PAs and LNAs on the circuit board **receive zero power and zero enable signaling**. All transmit and receive signals are attenuated by **17 dB to 22 dB** through the unpowered FEM diodes.
-4. Furthermore, with `xcap = 0`, the 40 MHz reference clock suffers substantial frequency drift, causing carrier frequency offset (CFO) errors that prevent 256-QAM constellation lock.
+4. In addition, with `xcap = 0`, the 40 MHz reference clock suffers substantial frequency drift, causing carrier frequency offset (CFO) errors that prevent 256-QAM constellation lock.
 5. **Observed Symptom**: Under upstream OpenWrt with `rtw88`, 5 GHz client devices experience extreme packet loss, weak RSSI (-82 dBm at 1 meter), and physical connection speeds capped at **58.5 Mbps** (MCS 0/1), completely breaking 802.11ac performance.
 
 ---

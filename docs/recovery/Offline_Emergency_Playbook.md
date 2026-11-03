@@ -117,7 +117,7 @@ The tool will:
    Remove-NetRoute -InterfaceAlias "Ethernet" -Confirm:$False
    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
    ```
-6. Open your web browser and navigate to:
+6. Open your web browser and move to:
    `http://192.168.0.1`
 7. The router displays the factory setup wizard. Your Tenda AC10 V1.0 is 100% restored!
 

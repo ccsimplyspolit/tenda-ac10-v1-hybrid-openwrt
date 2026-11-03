@@ -1,8 +1,8 @@
-# Stock Firmware Comprehensive Forensic & Security Audit
+# Stock Firmware Full Forensic & Security Audit
 
 ## 1. Audit Scope & Firmware Baseline
 
-This document presents a comprehensive forensic and security assessment of the official factory stock firmware for the Tenda AC10 V1.0 router:
+This document presents a complete forensic and security assessment of the official factory stock firmware for the Tenda AC10 V1.0 router:
 - **Target Firmware Version**: `V15.03.06.23_multi` (Build Date: 2018-05-18).
 - **Kernel Architecture**: Linux 3.10.90 (MIPS32 Little-Endian, gcc 4.4.7).
 - **Hardware Platform**: Tenda AC10 V1.0 (Realtek RTL8197FS SoC, 64 MB DDR2, RTL8822BE 5G PCIe, RTL8367RB GbE Switch, Winbond 8 MB SPI NOR Flash).

@@ -125,12 +125,12 @@ To prevent credential leaks, `RouterCfm_optimized_sanitized.cfg` resets all cred
 Deploying Stock+ takes less than 3 minutes and requires no technical tools beyond a web browser:
 
 ### Step 1: Verify Baseline Firmware
-1. Open your web browser and navigate to `http://192.168.0.1/`.
+1. Open your web browser and open `http://192.168.0.1/`.
 2. Check the current firmware version in **System Status**.
 3. Ensure your router is running official version **V15.03.06.23_multi** or **V15.03.06.52_multi**. (If running an older version, update to .23 or .52 first).
 
 ### Step 2: Backup Existing Settings (Optional)
-1. Navigate to **Administration** -> **Backup/Restore**.
+1. Open **Administration** -> **Backup/Restore**.
 2. Click **Backup** to save your current configuration file (`RouterCfm.cfg`) to your computer as a safety precaution.
 
 ### Step 3: Upload the Sanitized Configuration

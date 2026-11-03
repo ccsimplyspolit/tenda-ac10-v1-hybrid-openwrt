@@ -205,7 +205,7 @@ The RTL8197FS provides 64 general-purpose I/O pins grouped into eight 8-bit port
 | **GPIO 56** | Port G, Pin 7 | GPIO | **WPS Button** | Active-Low Hardware Pushbutton |
 | **GPIO 58** | Port H, Pin 2 | GPIO | **Switch Hardware Reset (`RST`)** | Active-Low Reset line to RTL8367RB |
 
-### Crucial GPIO Configuration for Switch SMI:
+### Critical GPIO Configuration for Switch SMI:
 In `vmlinux_stock.bin` (`rtl819x_8367r_i2c_pin_probe` at `0x801DF888`), the kernel driver probes and requests GPIO 18 (MDC) and GPIO 19 (MDIO) using standard GPIO subsystem wrappers:
 ```assembly
 0x801df888:  addiu    $sp, $sp, -0x20
